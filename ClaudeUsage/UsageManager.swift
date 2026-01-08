@@ -8,7 +8,7 @@ struct UsageData {
     let weeklyResetsAt: Date?
     let sonnetUtilization: Double?
     let sonnetResetsAt: Date?
-    
+
     var sessionPercentage: Int { Int(sessionUtilization) }
     var weeklyPercentage: Int { Int(weeklyUtilization) }
     var sonnetPercentage: Int? { sonnetUtilization.map { Int($0) } }
@@ -25,6 +25,14 @@ class UsageManager: ObservableObject {
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let githubRepo = "richhickson/claudecodeusage"
 
+    // Configured URLSession with timeouts
+    private lazy var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 10
+        config.timeoutIntervalForResource = 30
+        return URLSession(configuration: config)
+    }()
+
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
         let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
@@ -32,81 +40,92 @@ class UsageManager: ObservableObject {
         if maxUtil >= 70 { return "🟡" }
         return "🟢"
     }
-    
+
     func refresh() async {
         isLoading = true
         error = nil
-        
+
         defer { isLoading = false }
-        
+
         do {
-            guard let token = try getAccessToken() else {
-                error = "Not logged in to Claude Code"
-                return
-            }
-            
+            let token = try getAccessToken()
             let data = try await fetchUsage(token: token)
             usage = data
             lastUpdated = Date()
+        } catch let keychainError as KeychainError {
+            self.error = keychainError.localizedDescription
         } catch {
             self.error = error.localizedDescription
         }
     }
-    
-    private func getAccessToken() throws -> String? {
-        // Query Keychain for Claude Code credentials
+
+    private func getAccessToken() throws -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "Claude Code-credentials",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        
+
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        
-        guard status == errSecSuccess,
-              let data = result as? Data,
-              let jsonString = String(data: data, encoding: .utf8) else {
-            return nil
+
+        // Handle specific Keychain errors
+        switch status {
+        case errSecSuccess:
+            break
+        case errSecItemNotFound:
+            throw KeychainError.notLoggedIn
+        case errSecAuthFailed:
+            throw KeychainError.accessDenied
+        case errSecInteractionNotAllowed:
+            throw KeychainError.interactionNotAllowed
+        default:
+            throw KeychainError.unexpectedError(status: status)
         }
-        
-        // Parse JSON to extract accessToken
+
+        guard let data = result as? Data,
+              let jsonString = String(data: data, encoding: .utf8) else {
+            throw KeychainError.invalidData
+        }
+
         guard let jsonData = jsonString.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
               let oauth = json["claudeAiOauth"] as? [String: Any],
               let accessToken = oauth["accessToken"] as? String else {
-            return nil
+            throw KeychainError.invalidCredentialFormat
         }
-        
+
         return accessToken
     }
-    
+
     private func fetchUsage(token: String) async throws -> UsageData {
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("ClaudeUsage/1.0.0", forHTTPHeaderField: "User-Agent")
+        request.setValue("ClaudeUsage/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
-        
-        let (data, response) = try await URLSession.shared.data(for: request)
-        
+
+        let (data, response) = try await urlSession.data(for: request)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw UsageError.invalidResponse
         }
-        
+
         guard httpResponse.statusCode == 200 else {
             throw UsageError.apiError(statusCode: httpResponse.statusCode)
         }
-        
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-        
-        let fiveHour = json?["five_hour"] as? [String: Any]
-        let sevenDay = json?["seven_day"] as? [String: Any]
-        let sonnetOnly = json?["sonnet_only"] as? [String: Any]
-        
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw UsageError.invalidResponse
+        }
+
+        let fiveHour = json["five_hour"] as? [String: Any]
+        let sevenDay = json["seven_day"] as? [String: Any]
+        let sonnetOnly = json["sonnet_only"] as? [String: Any]
+
         return UsageData(
             sessionUtilization: fiveHour?["utilization"] as? Double ?? 0,
             sessionResetsAt: parseDate(fiveHour?["resets_at"] as? String),
@@ -116,7 +135,7 @@ class UsageManager: ObservableObject {
             sonnetResetsAt: parseDate(sonnetOnly?["resets_at"] as? String)
         )
     }
-    
+
     private func parseDate(_ string: String?) -> Date? {
         guard let string = string else { return nil }
         let formatter = ISO8601DateFormatter()
@@ -124,7 +143,6 @@ class UsageManager: ObservableObject {
         if let date = formatter.date(from: string) {
             return date
         }
-        // Try without fractional seconds
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: string)
     }
@@ -134,9 +152,10 @@ class UsageManager: ObservableObject {
 
         var request = URLRequest(url: url)
         request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+        request.setValue("ClaudeUsage/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
 
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await urlSession.data(for: request)
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let tagName = json["tag_name"] as? String {
                 let latestVersion = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
@@ -163,16 +182,45 @@ class UsageManager: ObservableObject {
     }
 }
 
+enum KeychainError: LocalizedError {
+    case notLoggedIn
+    case accessDenied
+    case interactionNotAllowed
+    case invalidData
+    case invalidCredentialFormat
+    case unexpectedError(status: OSStatus)
+
+    var errorDescription: String? {
+        switch self {
+        case .notLoggedIn:
+            return "Not logged in to Claude Code"
+        case .accessDenied:
+            return "Keychain access denied. Please allow access in System Settings."
+        case .interactionNotAllowed:
+            return "Keychain interaction not allowed. Try unlocking your Mac."
+        case .invalidData:
+            return "Could not read Keychain data"
+        case .invalidCredentialFormat:
+            return "Invalid credential format. Try running 'claude' to re-authenticate."
+        case .unexpectedError(let status):
+            return "Keychain error (code: \(status))"
+        }
+    }
+}
+
 enum UsageError: LocalizedError {
     case invalidResponse
     case apiError(statusCode: Int)
-    
+
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
             return "Invalid response from API"
         case .apiError(let code):
-            return "API error: \(code)"
+            if code == 401 {
+                return "Authentication expired. Run 'claude' to re-authenticate."
+            }
+            return "API error (code: \(code))"
         }
     }
 }

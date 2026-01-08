@@ -9,13 +9,11 @@ let package = Package(
     products: [
         .executable(name: "ClaudeUsage", targets: ["ClaudeUsage"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/kishikawakatsumi/KeychainAccess.git", from: "4.2.2")
-    ],
+    dependencies: [],
     targets: [
         .executableTarget(
             name: "ClaudeUsage",
-            dependencies: ["KeychainAccess"],
+            dependencies: [],
             path: "ClaudeUsage"
         )
     ]
