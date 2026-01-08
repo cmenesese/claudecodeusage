@@ -5,7 +5,12 @@ import ServiceManagement
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @Environment(\.openURL) var openURL
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLogin: Bool = {
+        if #available(macOS 13.0, *) {
+            return SMAppService.mainApp.status == .enabled
+        }
+        return false
+    }()
     
     var body: some View {
         VStack(spacing: 0) {
