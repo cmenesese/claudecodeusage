@@ -20,7 +20,11 @@ class UsageManager: ObservableObject {
     @Published var error: String?
     @Published var isLoading = false
     @Published var lastUpdated: Date?
-    
+    @Published var updateAvailable: String?
+
+    static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    static let githubRepo = "richhickson/claudecodeusage"
+
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
         let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
@@ -123,6 +127,39 @@ class UsageManager: ObservableObject {
         // Try without fractional seconds
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: string)
+    }
+
+    func checkForUpdates() async {
+        guard let url = URL(string: "https://api.github.com/repos/\(Self.githubRepo)/releases/latest") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let tagName = json["tag_name"] as? String {
+                let latestVersion = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+                if isNewerVersion(latestVersion, than: Self.currentVersion) {
+                    updateAvailable = latestVersion
+                }
+            }
+        } catch {
+            // Silently fail - update check is not critical
+        }
+    }
+
+    private func isNewerVersion(_ latest: String, than current: String) -> Bool {
+        let latestParts = latest.split(separator: ".").compactMap { Int($0) }
+        let currentParts = current.split(separator: ".").compactMap { Int($0) }
+
+        for i in 0..<max(latestParts.count, currentParts.count) {
+            let l = i < latestParts.count ? latestParts[i] : 0
+            let c = i < currentParts.count ? currentParts[i] : 0
+            if l > c { return true }
+            if l < c { return false }
+        }
+        return false
     }
 }
 

@@ -49,9 +49,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func startFetching() {
-        // Initial fetch
+        // Initial fetch and update check
         Task {
             await usageManager.refresh()
+            await usageManager.checkForUpdates()
             updateStatusItem()
         }
 

@@ -1,9 +1,11 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @Environment(\.openURL) var openURL
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     
     var body: some View {
         VStack(spacing: 0) {
@@ -23,6 +25,23 @@ struct UsageView: View {
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
             
+            // Update available banner
+            if let newVersion = manager.updateAvailable {
+                Button(action: {
+                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.down.circle.fill")
+                        Text("Update Available: v\(newVersion)")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+
             // Follow Me button
             Button(action: {
                 openURL(URL(string: "https://x.com/richhickson")!)
@@ -35,7 +54,8 @@ struct UsageView: View {
             }
             .buttonStyle(.borderedProminent)
             .padding(.horizontal)
-            .padding(.vertical, 8)
+            .padding(.vertical, manager.updateAvailable == nil ? 8 : 0)
+            .padding(.bottom, 8)
 
             Divider()
 
@@ -151,39 +171,60 @@ struct UsageView: View {
     
     @ViewBuilder
     func footerView() -> some View {
-        HStack {
-            if let lastUpdated = manager.lastUpdated {
-                Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            Button(action: {
-                Task { await manager.refresh() }
-            }) {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .disabled(manager.isLoading)
-            
-            Button(action: {
-                openURL(URL(string: "https://claude.ai")!)
-            }) {
-                Image(systemName: "globe")
-            }
-            .buttonStyle(.borderless)
+        VStack(spacing: 8) {
+            Toggle("Launch at Login", isOn: $launchAtLogin)
+                .toggleStyle(.checkbox)
+                .font(.caption)
+                .onChange(of: launchAtLogin) { newValue in
+                    do {
+                        if newValue {
+                            try SMAppService.mainApp.register()
+                        } else {
+                            try SMAppService.mainApp.unregister()
+                        }
+                    } catch {
+                        launchAtLogin = !newValue
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 8)
 
-            Button(action: {
-                NSApplication.shared.terminate(nil)
-            }) {
-                Image(systemName: "xmark.circle")
+            Divider()
+
+            HStack {
+                if let lastUpdated = manager.lastUpdated {
+                    Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Button(action: {
+                    Task { await manager.refresh() }
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.borderless)
+                .disabled(manager.isLoading)
+
+                Button(action: {
+                    openURL(URL(string: "https://claude.ai")!)
+                }) {
+                    Image(systemName: "globe")
+                }
+                .buttonStyle(.borderless)
+
+                Button(action: {
+                    NSApplication.shared.terminate(nil)
+                }) {
+                    Image(systemName: "xmark.circle")
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.borderless)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
         .background(Color(NSColor.controlBackgroundColor))
     }
     
