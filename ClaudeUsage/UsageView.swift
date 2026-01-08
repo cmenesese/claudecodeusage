@@ -1,0 +1,235 @@
+import SwiftUI
+
+struct UsageView: View {
+    @ObservedObject var manager: UsageManager
+    @Environment(\.openURL) var openURL
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack {
+                Image(systemName: "chart.bar.fill")
+                    .foregroundColor(.accentColor)
+                Text("Claude Usage")
+                    .font(.headline)
+                Spacer()
+                
+                if manager.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+            .padding()
+            .background(Color(NSColor.controlBackgroundColor))
+            
+            Divider()
+            
+            if let error = manager.error {
+                errorView(error)
+            } else if let usage = manager.usage {
+                usageContent(usage)
+            } else {
+                loadingView()
+            }
+            
+            Divider()
+            
+            // Footer
+            footerView()
+        }
+        .frame(width: 280)
+    }
+    
+    @ViewBuilder
+    func usageContent(_ usage: UsageData) -> some View {
+        VStack(spacing: 16) {
+            // Session usage
+            UsageRow(
+                title: "Session",
+                subtitle: "5-hour window",
+                percentage: usage.sessionPercentage,
+                resetsAt: usage.sessionResetsAt,
+                color: colorForPercentage(usage.sessionPercentage)
+            )
+            
+            // Weekly usage
+            UsageRow(
+                title: "Weekly",
+                subtitle: "7-day window",
+                percentage: usage.weeklyPercentage,
+                resetsAt: usage.weeklyResetsAt,
+                color: colorForPercentage(usage.weeklyPercentage)
+            )
+            
+            // Sonnet only (if available)
+            if let sonnetPct = usage.sonnetPercentage {
+                UsageRow(
+                    title: "Sonnet Only",
+                    subtitle: "Model-specific",
+                    percentage: sonnetPct,
+                    resetsAt: usage.sonnetResetsAt,
+                    color: colorForPercentage(sonnetPct)
+                )
+            }
+        }
+        .padding()
+    }
+    
+    @ViewBuilder
+    func errorView(_ error: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.largeTitle)
+                .foregroundColor(.orange)
+            
+            Text(error)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            if error.contains("Not logged in") {
+                Text("Run `claude` in Terminal to authenticate")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+    
+    @ViewBuilder
+    func loadingView() -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Loading usage data...")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+    
+    @ViewBuilder
+    func footerView() -> some View {
+        HStack {
+            if let lastUpdated = manager.lastUpdated {
+                Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            Button(action: {
+                Task { await manager.refresh() }
+            }) {
+                Image(systemName: "arrow.clockwise")
+            }
+            .buttonStyle(.borderless)
+            .disabled(manager.isLoading)
+            
+            Button(action: {
+                openURL(URL(string: "https://claude.ai")!)
+            }) {
+                Image(systemName: "globe")
+            }
+            .buttonStyle(.borderless)
+            
+            Button(action: {
+                NSApplication.shared.terminate(nil)
+            }) {
+                Image(systemName: "xmark.circle")
+            }
+            .buttonStyle(.borderless)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color(NSColor.controlBackgroundColor))
+    }
+    
+    func colorForPercentage(_ pct: Int) -> Color {
+        if pct >= 90 { return .red }
+        if pct >= 70 { return .orange }
+        return .green
+    }
+}
+
+struct UsageRow: View {
+    let title: String
+    let subtitle: String
+    let percentage: Int
+    let resetsAt: Date?
+    let color: Color
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Text("\(percentage)%")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(color)
+            }
+            
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(NSColor.separatorColor))
+                        .frame(height: 8)
+                    
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(color)
+                        .frame(width: geometry.size.width * CGFloat(percentage) / 100, height: 8)
+                }
+            }
+            .frame(height: 8)
+            
+            // Reset time
+            if let resetsAt = resetsAt {
+                HStack {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                    Text("Resets \(formatTimeRemaining(resetsAt))")
+                        .font(.caption)
+                }
+                .foregroundColor(.secondary)
+            }
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
+    }
+    
+    func formatTimeRemaining(_ date: Date) -> String {
+        let now = Date()
+        let diff = date.timeIntervalSince(now)
+        
+        if diff <= 0 { return "soon" }
+        
+        let hours = Int(diff / 3600)
+        let minutes = Int((diff.truncatingRemainder(dividingBy: 3600)) / 60)
+        
+        if hours > 24 {
+            let days = hours / 24
+            let remainingHours = hours % 24
+            return "in \(days)d \(remainingHours)h"
+        }
+        
+        return "in \(hours)h \(minutes)m"
+    }
+}
+
+#Preview {
+    UsageView(manager: UsageManager())
+}
