@@ -20,8 +20,11 @@ struct UsageView: View {
                     .foregroundColor(.accentColor)
                 Text("Claude Usage")
                     .font(.headline)
+                Text("v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
                 Spacer()
-                
+
                 if manager.isLoading {
                     ProgressView()
                         .scaleEffect(0.7)
