@@ -9,9 +9,9 @@ struct UsageData {
     let sonnetUtilization: Double?
     let sonnetResetsAt: Date?
     
-    var sessionPercentage: Int { Int(sessionUtilization * 100) }
-    var weeklyPercentage: Int { Int(weeklyUtilization * 100) }
-    var sonnetPercentage: Int? { sonnetUtilization.map { Int($0 * 100) } }
+    var sessionPercentage: Int { Int(sessionUtilization) }
+    var weeklyPercentage: Int { Int(weeklyUtilization) }
+    var sonnetPercentage: Int? { sonnetUtilization.map { Int($0) } }
 }
 
 @MainActor
@@ -24,8 +24,8 @@ class UsageManager: ObservableObject {
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
         let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
-        if maxUtil >= 0.9 { return "🔴" }
-        if maxUtil >= 0.7 { return "🟡" }
+        if maxUtil >= 90 { return "🔴" }
+        if maxUtil >= 70 { return "🟡" }
         return "🟢"
     }
     

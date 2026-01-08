@@ -11,34 +11,55 @@ struct ClaudeUsageApp: App {
     }
 }
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var usageManager = UsageManager()
     var timer: Timer?
-    
+
+    private let hasLaunchedKey = "hasLaunchedBefore"
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon - menubar only
         NSApp.setActivationPolicy(.accessory)
-        
+
         setupStatusItem()
         setupPopover()
-        
+
+        // Show first launch explanation if needed
+        if !UserDefaults.standard.bool(forKey: hasLaunchedKey) {
+            showKeychainExplanation {
+                UserDefaults.standard.set(true, forKey: self.hasLaunchedKey)
+                self.startFetching()
+            }
+        } else {
+            startFetching()
+        }
+    }
+
+    func showKeychainExplanation(completion: @escaping () -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Keychain Access Required"
+        alert.informativeText = "Claude Usage needs to access the macOS Keychain to read your Claude Code credentials.\n\nThis allows the app to check your usage limits without requiring you to log in again.\n\nYour credentials are stored securely by Claude Code and are never sent anywhere except to Anthropic's API."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Continue")
+        alert.runModal()
+        completion()
+    }
+
+    func startFetching() {
         // Initial fetch
         Task {
             await usageManager.refresh()
-            await MainActor.run {
-                updateStatusItem()
-            }
+            updateStatusItem()
         }
-        
+
         // Refresh every 2 minutes
         timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
-            Task {
+            Task { @MainActor in
                 await self?.usageManager.refresh()
-                await MainActor.run {
-                    self?.updateStatusItem()
-                }
+                self?.updateStatusItem()
             }
         }
     }
@@ -64,7 +85,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
         
         if let usage = usageManager.usage {
-            let sessionPct = Int(usage.sessionUtilization * 100)
+            let sessionPct = usage.sessionPercentage
             let emoji = usageManager.statusEmoji
             button.title = "\(emoji) \(sessionPct)%"
         } else if usageManager.error != nil {

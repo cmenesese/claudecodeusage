@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
@@ -22,8 +23,22 @@ struct UsageView: View {
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
             
+            // Follow Me button
+            Button(action: {
+                openURL(URL(string: "https://x.com/richhickson")!)
+            }) {
+                HStack {
+                    Image(systemName: "person.badge.plus")
+                    Text("Follow Me on X")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
             Divider()
-            
+
             if let error = manager.error {
                 errorView(error)
             } else if let usage = manager.usage {
@@ -78,19 +93,44 @@ struct UsageView: View {
     @ViewBuilder
     func errorView(_ error: String) -> some View {
         VStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.largeTitle)
-                .foregroundColor(.orange)
-            
-            Text(error)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
             if error.contains("Not logged in") {
-                Text("Run `claude` in Terminal to authenticate")
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.largeTitle)
+                    .foregroundColor(.blue)
+
+                Text("Not Signed In")
+                    .font(.headline)
+
+                Text("This app uses credentials from Claude Code stored in the macOS Keychain.")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text("Please run `claude` in Terminal and log in first.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Open Terminal & Run Claude") {
+                    launchClaudeCLI()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+
+                Button("Install Claude Code") {
+                    openURL(URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview")!)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.largeTitle)
+                    .foregroundColor(.orange)
+
+                Text(error)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding()
@@ -134,7 +174,7 @@ struct UsageView: View {
                 Image(systemName: "globe")
             }
             .buttonStyle(.borderless)
-            
+
             Button(action: {
                 NSApplication.shared.terminate(nil)
             }) {
@@ -151,6 +191,19 @@ struct UsageView: View {
         if pct >= 90 { return .red }
         if pct >= 70 { return .orange }
         return .green
+    }
+
+    func launchClaudeCLI() {
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "claude"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
     }
 }
 

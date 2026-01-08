@@ -99,4 +99,4 @@ This is an unofficial tool not affiliated with Anthropic. It uses an undocumente
 
 ---
 
-Made with ☕ by [HelpFully IT](https://helpfully.co.uk)
+Made by [@richhickson](https://x.com/richhickson)
