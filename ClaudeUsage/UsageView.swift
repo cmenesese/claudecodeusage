@@ -50,21 +50,6 @@ struct UsageView: View {
                 .padding(.vertical, 8)
             }
 
-            // Follow Me button
-            Button(action: {
-                openURL(URL(string: "https://x.com/richhickson")!)
-            }) {
-                HStack {
-                    Image(systemName: "person.badge.plus")
-                    Text("Follow Me on X")
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.horizontal)
-            .padding(.vertical, manager.updateAvailable == nil ? 8 : 0)
-            .padding(.bottom, 8)
-
             Divider()
 
             if let error = manager.error {
@@ -226,6 +211,15 @@ struct UsageView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(manager.isLoading)
+
+                Button(action: {
+                    openURL(URL(string: "https://x.com/richhickson")!)
+                }) {
+                    Text("𝕏")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .buttonStyle(.borderless)
+                .help("Follow me on X")
 
                 Button(action: {
                     openURL(URL(string: "https://claude.ai")!)
