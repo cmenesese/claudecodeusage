@@ -99,6 +99,15 @@ struct UsageView: View {
                     color: colorForPercentage(sonnetPct)
                 )
             }
+
+            // Extra usage / overage (if enabled)
+            if usage.extraUsageEnabled, let limit = usage.extraUsageMonthlyLimit, let used = usage.extraUsageUsedCredits {
+                OverageRow(
+                    usedDollars: used / 100,
+                    limitDollars: limit / 100,
+                    percentage: usage.extraUsagePercentage ?? 0
+                )
+            }
         }
         .padding()
     }
@@ -336,6 +345,62 @@ struct UsageRow: View {
         }
         
         return "in \(hours)h \(minutes)m"
+    }
+}
+
+struct OverageRow: View {
+    let usedDollars: Double
+    let limitDollars: Double
+    let percentage: Int
+
+    var color: Color {
+        if percentage >= 90 { return .red }
+        if percentage >= 70 { return .orange }
+        return .blue
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Overage")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Text("Extra usage this month")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("$\(String(format: "%.2f", usedDollars))")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(color)
+                    Text("of $\(String(format: "%.0f", limitDollars)) limit")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(NSColor.separatorColor))
+                        .frame(height: 8)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(color)
+                        .frame(width: geometry.size.width * CGFloat(min(percentage, 100)) / 100, height: 8)
+                }
+            }
+            .frame(height: 8)
+        }
+        .padding(12)
+        .background(Color(NSColor.controlBackgroundColor))
+        .cornerRadius(8)
     }
 }
 

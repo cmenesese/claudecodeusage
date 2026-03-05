@@ -8,10 +8,17 @@ struct UsageData {
     let weeklyResetsAt: Date?
     let sonnetUtilization: Double?
     let sonnetResetsAt: Date?
+    let extraUsageEnabled: Bool
+    let extraUsageMonthlyLimit: Double?
+    let extraUsageUsedCredits: Double?
 
     var sessionPercentage: Int { Int(sessionUtilization) }
     var weeklyPercentage: Int { Int(weeklyUtilization) }
     var sonnetPercentage: Int? { sonnetUtilization.map { Int($0) } }
+    var extraUsagePercentage: Int? {
+        guard extraUsageEnabled, let limit = extraUsageMonthlyLimit, let used = extraUsageUsedCredits, limit > 0 else { return nil }
+        return Int((used / limit) * 100)
+    }
 }
 
 @MainActor
@@ -24,6 +31,26 @@ class UsageManager: ObservableObject {
 
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let githubRepo = "richhickson/claudecodeusage"
+    static let claudeCodeVersion: String = {
+        // Detect installed Claude Code version for User-Agent
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["claude", "--version"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            if let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) {
+                // Output is like "2.1.69 (Claude Code)" - extract version number
+                let version = output.split(separator: " ").first.map(String.init) ?? output
+                if !version.isEmpty { return version }
+            }
+        } catch {}
+        return "2.1.0"
+    }()
 
     // Configured URLSession with timeouts
     private lazy var urlSession: URLSession = {
@@ -42,10 +69,10 @@ class UsageManager: ObservableObject {
     }
 
     func refresh() async {
-        await refreshWithRetry(retriesRemaining: 3)
+        await refreshWithRetry(retriesRemaining: 5)
     }
 
-    private func refreshWithRetry(retriesRemaining: Int) async {
+    private func refreshWithRetry(retriesRemaining: Int, backoffSeconds: UInt64 = 2) async {
         isLoading = true
         error = nil
 
@@ -60,15 +87,23 @@ class UsageManager: ObservableObject {
             // Retry on keychain errors that may resolve after unlock
             if retriesRemaining > 0 && keychainError.isRetryable {
                 try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
-                await refreshWithRetry(retriesRemaining: retriesRemaining - 1)
+                await refreshWithRetry(retriesRemaining: retriesRemaining - 1, backoffSeconds: backoffSeconds)
                 return
             }
             self.error = keychainError.localizedDescription
+        } catch let usageError as UsageError {
+            // Retry on rate limit (429) with exponential backoff
+            if retriesRemaining > 0 && usageError.isRetryable {
+                try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
+                await refreshWithRetry(retriesRemaining: retriesRemaining - 1, backoffSeconds: backoffSeconds * 2)
+                return
+            }
+            self.error = usageError.localizedDescription
         } catch let urlError as URLError {
             // Retry on network errors (common after wake from sleep)
             if retriesRemaining > 0 && urlError.isRetryable {
                 try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds for network
-                await refreshWithRetry(retriesRemaining: retriesRemaining - 1)
+                await refreshWithRetry(retriesRemaining: retriesRemaining - 1, backoffSeconds: backoffSeconds)
                 return
             }
             self.error = urlError.localizedDescription
@@ -184,7 +219,7 @@ class UsageManager: ObservableObject {
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("ClaudeUsage/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("claude-code/\(Self.claudeCodeVersion)", forHTTPHeaderField: "User-Agent")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
 
@@ -204,15 +239,20 @@ class UsageManager: ObservableObject {
 
         let fiveHour = json["five_hour"] as? [String: Any]
         let sevenDay = json["seven_day"] as? [String: Any]
-        let sonnetOnly = json["sonnet_only"] as? [String: Any]
+        // Try new field name first, fall back to legacy
+        let sonnet = json["seven_day_sonnet"] as? [String: Any] ?? json["sonnet_only"] as? [String: Any]
+        let extraUsage = json["extra_usage"] as? [String: Any]
 
         return UsageData(
             sessionUtilization: fiveHour?["utilization"] as? Double ?? 0,
             sessionResetsAt: parseDate(fiveHour?["resets_at"] as? String),
             weeklyUtilization: sevenDay?["utilization"] as? Double ?? 0,
             weeklyResetsAt: parseDate(sevenDay?["resets_at"] as? String),
-            sonnetUtilization: sonnetOnly?["utilization"] as? Double,
-            sonnetResetsAt: parseDate(sonnetOnly?["resets_at"] as? String)
+            sonnetUtilization: sonnet?["utilization"] as? Double,
+            sonnetResetsAt: parseDate(sonnet?["resets_at"] as? String),
+            extraUsageEnabled: extraUsage?["is_enabled"] as? Bool ?? false,
+            extraUsageMonthlyLimit: extraUsage?["monthly_limit"] as? Double,
+            extraUsageUsedCredits: extraUsage?["used_credits"] as? Double
         )
     }
 
@@ -317,7 +357,19 @@ enum UsageError: LocalizedError {
             if code == 401 {
                 return "Authentication expired. Run 'claude' to re-authenticate."
             }
+            if code == 429 {
+                return "Rate limited by API. Will retry automatically."
+            }
             return "API error (code: \(code))"
+        }
+    }
+
+    var isRetryable: Bool {
+        switch self {
+        case .apiError(let code):
+            return code == 429 || code == 500 || code == 502 || code == 503
+        case .invalidResponse:
+            return false
         }
     }
 }
