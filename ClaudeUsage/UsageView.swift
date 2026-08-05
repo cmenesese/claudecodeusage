@@ -89,6 +89,17 @@ struct UsageView: View {
                 color: colorForPercentage(usage.weeklyPercentage)
             )
             
+            // Model-scoped weekly limits (Fable, Opus, etc.)
+            ForEach(usage.modelLimits, id: \.name) { limit in
+                UsageRow(
+                    title: limit.name,
+                    subtitle: "Model weekly limit",
+                    percentage: limit.percentage,
+                    resetsAt: limit.resetsAt,
+                    color: colorForPercentage(limit.percentage)
+                )
+            }
+
             // Sonnet only (if available)
             if let sonnetPct = usage.sonnetPercentage {
                 UsageRow(
@@ -227,6 +238,14 @@ struct UsageView: View {
                     Image(systemName: "globe")
                 }
                 .buttonStyle(.borderless)
+
+                Button(action: {
+                    AppDelegate.shared?.openSettingsWindow()
+                }) {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .help("Claude Code settings (CLAUDE.md, retention)")
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)

@@ -14,13 +14,17 @@ struct ClaudeUsageApp: App {
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
+    static private(set) var shared: AppDelegate?
+
     var statusItem: NSStatusItem?
     var popover: NSPopover?
+    var settingsWindow: NSWindow?
     var usageManager = UsageManager()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppDelegate.shared = self
         // Hide dock icon - menubar only
         NSApp.setActivationPolicy(.accessory)
 
@@ -115,6 +119,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    func openSettingsWindow() {
+        popover?.performClose(nil)
+
+        if settingsWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 520, height: 520),
+                styleMask: [.titled, .closable, .miniaturizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "ClaudeUsage Settings"
+            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView())
+            window.isReleasedWhenClosed = false
+            window.center()
+            settingsWindow = window
+        }
+
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     @objc func togglePopover() {
         guard let button = statusItem?.button, let popover = popover else { return }
         

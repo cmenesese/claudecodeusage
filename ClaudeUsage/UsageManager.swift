@@ -1,6 +1,14 @@
 import Foundation
 import Security
 
+struct ModelLimit {
+    let name: String
+    let utilization: Double
+    let resetsAt: Date?
+
+    var percentage: Int { Int(utilization) }
+}
+
 struct UsageData {
     let sessionUtilization: Double
     let sessionResetsAt: Date?
@@ -8,6 +16,7 @@ struct UsageData {
     let weeklyResetsAt: Date?
     let sonnetUtilization: Double?
     let sonnetResetsAt: Date?
+    let modelLimits: [ModelLimit]
     let extraUsageEnabled: Bool
     let extraUsageMonthlyLimit: Double?
     let extraUsageUsedCredits: Double?
@@ -62,7 +71,8 @@ class UsageManager: ObservableObject {
 
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
-        let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization)
+        let maxModelUtil = usage.modelLimits.map(\.utilization).max() ?? 0
+        let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization, maxModelUtil)
         if maxUtil >= 90 { return "🔴" }
         if maxUtil >= 70 { return "🟡" }
         return "🟢"
@@ -243,6 +253,22 @@ class UsageManager: ObservableObject {
         let sonnet = json["seven_day_sonnet"] as? [String: Any] ?? json["sonnet_only"] as? [String: Any]
         let extraUsage = json["extra_usage"] as? [String: Any]
 
+        // Model-scoped limits (e.g. Fable/Opus weekly caps) come from the `limits` array
+        var modelLimits: [ModelLimit] = []
+        if let limits = json["limits"] as? [[String: Any]] {
+            for limit in limits {
+                guard let scope = limit["scope"] as? [String: Any],
+                      let model = scope["model"] as? [String: Any],
+                      let name = model["display_name"] as? String,
+                      let percent = (limit["percent"] as? NSNumber)?.doubleValue else { continue }
+                modelLimits.append(ModelLimit(
+                    name: name,
+                    utilization: percent,
+                    resetsAt: parseDate(limit["resets_at"] as? String)
+                ))
+            }
+        }
+
         return UsageData(
             sessionUtilization: fiveHour?["utilization"] as? Double ?? 0,
             sessionResetsAt: parseDate(fiveHour?["resets_at"] as? String),
@@ -250,6 +276,7 @@ class UsageManager: ObservableObject {
             weeklyResetsAt: parseDate(sevenDay?["resets_at"] as? String),
             sonnetUtilization: sonnet?["utilization"] as? Double,
             sonnetResetsAt: parseDate(sonnet?["resets_at"] as? String),
+            modelLimits: modelLimits,
             extraUsageEnabled: extraUsage?["is_enabled"] as? Bool ?? false,
             extraUsageMonthlyLimit: extraUsage?["monthly_limit"] as? Double,
             extraUsageUsedCredits: extraUsage?["used_credits"] as? Double
