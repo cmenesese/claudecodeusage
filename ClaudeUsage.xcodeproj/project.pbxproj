@@ -11,6 +11,7 @@
 		002 /* UsageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 102 /* UsageManager.swift */; };
 		003 /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103 /* UsageView.swift */; };
 		005 /* ClaudeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 106 /* ClaudeSettingsView.swift */; };
+		006 /* SessionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107 /* SessionMonitor.swift */; };
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -22,6 +23,7 @@
 		104 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		105 /* ClaudeUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudeUsage.entitlements; sourceTree = "<group>"; };
 		106 /* ClaudeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSettingsView.swift; sourceTree = "<group>"; };
+		107 /* SessionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -50,6 +52,7 @@
 				102 /* UsageManager.swift */,
 				103 /* UsageView.swift */,
 				106 /* ClaudeSettingsView.swift */,
+				107 /* SessionMonitor.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -137,6 +140,7 @@
 				002 /* UsageManager.swift in Sources */,
 				003 /* UsageView.swift in Sources */,
 				005 /* ClaudeSettingsView.swift in Sources */,
+				006 /* SessionMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -276,12 +280,13 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Usage";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "ClaudeUsage focuses the terminal window running your Claude Code session when you click a session alert.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.helpfully.ClaudeUsage;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -304,12 +309,13 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Usage";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_NSAppleEventsUsageDescription = "ClaudeUsage focuses the terminal window running your Claude Code session when you click a session alert.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.9;
+				MARKETING_VERSION = 1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.helpfully.ClaudeUsage;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

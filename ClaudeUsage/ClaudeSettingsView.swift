@@ -87,7 +87,9 @@ class ClaudeConfigManager: ObservableObject {
 }
 
 struct ClaudeSettingsView: View {
+    @ObservedObject var sessionMonitor: SessionMonitor
     @StateObject private var config = ClaudeConfigManager()
+    @State private var alertsEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -106,6 +108,80 @@ struct ClaudeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    // Session alerts (hooks in settings.json)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Session Alerts")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text("Get a 🔔 in the menu bar and a macOS notification when a Claude Code session is waiting for your permission or input. Installs status hooks into ~/.claude/settings.json (your other settings and hooks are preserved). Takes effect for newly started Claude Code sessions.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Toggle("Alert when a session needs attention", isOn: $alertsEnabled)
+                            .toggleStyle(.switch)
+                            .onChange(of: alertsEnabled) { newValue in
+                                guard newValue != sessionMonitor.hooksInstalled else { return }
+                                do {
+                                    try sessionMonitor.setEnabled(newValue)
+                                    config.statusMessage = newValue
+                                        ? "Saved: session hooks installed"
+                                        : "Saved: session hooks removed"
+                                } catch {
+                                    alertsEnabled = !newValue
+                                    config.statusMessage = "Failed: \(error.localizedDescription)"
+                                }
+                            }
+
+                        if alertsEnabled {
+                            Toggle("Show notification pop-ups", isOn: Binding(
+                                get: { sessionMonitor.popupNotificationsEnabled },
+                                set: { sessionMonitor.popupNotificationsEnabled = $0 }
+                            ))
+                            .toggleStyle(.switch)
+                            .padding(.leading, 16)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                switch sessionMonitor.notificationsAuthorized {
+                                case false:
+                                    Label("Notifications for ClaudeUsage are turned off in System Settings", systemImage: "bell.slash.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                    Button("Open Notification Settings") {
+                                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.notifications")!)
+                                    }
+                                    .font(.caption)
+                                case nil:
+                                    Label("Notification permission not granted yet", systemImage: "bell.badge")
+                                        .font(.caption)
+                                        .foregroundColor(.orange)
+                                    Button("Request Permission") {
+                                        sessionMonitor.requestNotificationPermission()
+                                    }
+                                    .font(.caption)
+                                default:
+                                    Label("Notifications allowed", systemImage: "bell.fill")
+                                        .font(.caption)
+                                        .foregroundColor(.green)
+                                    Button("Send Test Notification") {
+                                        sessionMonitor.sendTestNotification()
+                                    }
+                                    .font(.caption)
+                                }
+
+                                if let error = sessionMonitor.notificationError {
+                                    Text("Permission error: \(error)")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                            .padding(.leading, 16)
+                        }
+                    }
+
+                    Divider()
+
                     // Conversation retention (settings.json)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Conversation Retention")
@@ -188,10 +264,12 @@ struct ClaudeSettingsView: View {
         .frame(width: 520, height: 520)
         .onAppear {
             config.load()
+            alertsEnabled = sessionMonitor.hooksInstalled
+            sessionMonitor.refreshNotificationAuthStatus()
         }
     }
 }
 
 #Preview {
-    ClaudeSettingsView()
+    ClaudeSettingsView(sessionMonitor: SessionMonitor())
 }

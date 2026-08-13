@@ -4,6 +4,7 @@ import ServiceManagement
 
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
+    @ObservedObject var sessionMonitor: SessionMonitor
     @Environment(\.openURL) var openURL
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
@@ -51,6 +52,12 @@ struct UsageView: View {
             }
 
             Divider()
+
+            // Live Claude Code sessions (when alert hooks are installed)
+            if sessionMonitor.hooksInstalled && !sessionMonitor.sessions.isEmpty {
+                sessionsSection()
+                Divider()
+            }
 
             if let error = manager.error {
                 errorView(error)
@@ -123,6 +130,70 @@ struct UsageView: View {
         .padding()
     }
     
+    @ViewBuilder
+    func sessionsSection() -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("CLAUDE SESSIONS")
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+
+            ForEach(sessionMonitor.sessions) { session in
+                Button(action: {
+                    AppDelegate.shared?.popover?.performClose(nil)
+                    sessionMonitor.focusSession(session)
+                }) {
+                    HStack(spacing: 8) {
+                        Text(sessionIcon(session.status))
+                            .font(.caption)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(session.projectName)
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .lineLimit(1)
+                            Text(sessionLabel(session))
+                                .font(.caption2)
+                                .foregroundColor(session.status == .needsAttention ? .orange : .secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer()
+
+                        Text(session.updatedAt.formatted(.relative(presentation: .named)))
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Jump to this session's terminal window")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
+    func sessionIcon(_ status: ClaudeSession.Status) -> String {
+        switch status {
+        case .needsAttention: return "🔔"
+        case .running: return "⚙️"
+        case .finished: return "✅"
+        }
+    }
+
+    func sessionLabel(_ session: ClaudeSession) -> String {
+        switch session.status {
+        case .needsAttention:
+            return session.message.isEmpty ? "Needs your input" : session.message
+        case .running:
+            return "Working…"
+        case .finished:
+            return "Finished"
+        }
+    }
+
     @ViewBuilder
     func errorView(_ error: String) -> some View {
         VStack(spacing: 12) {
@@ -424,5 +495,5 @@ struct OverageRow: View {
 }
 
 #Preview {
-    UsageView(manager: UsageManager())
+    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor())
 }
