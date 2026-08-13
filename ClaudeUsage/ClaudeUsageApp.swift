@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UserNotifications
 
 @main
 struct ClaudeUsageApp: App {
@@ -13,13 +14,14 @@ struct ClaudeUsageApp: App {
 }
 
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     static private(set) var shared: AppDelegate?
 
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var settingsWindow: NSWindow?
     var usageManager = UsageManager()
+    var sessionMonitor = SessionMonitor()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -28,11 +30,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Hide dock icon - menubar only
         NSApp.setActivationPolicy(.accessory)
 
+        // Present notification banners even when the app is considered active
+        UNUserNotificationCenter.current().delegate = self
+
         setupStatusItem()
         setupPopover()
         setupWakeNotification()
         setupUsageObserver()
         startFetching()
+
+        // Request notification permission after launch completes (too early fails silently)
+        if sessionMonitor.hooksInstalled {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.sessionMonitor.requestNotificationPermission()
+            }
+        }
     }
 
     func setupWakeNotification() {
@@ -52,6 +64,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         usageManager.$error
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &cancellables)
+
+        sessionMonitor.$sessions
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateStatusItem() }
             .store(in: &cancellables)
@@ -102,20 +119,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 280, height: 320)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager))
+        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager, sessionMonitor: sessionMonitor))
     }
     
     func updateStatusItem() {
         guard let button = statusItem?.button else { return }
 
+        let attentionCount = sessionMonitor.needsAttentionSessions.count
+        let bell = attentionCount > 0 ? "🔔\(attentionCount) " : ""
+
         if let usage = usageManager.usage {
             let sessionPct = usage.sessionPercentage
             let emoji = usageManager.statusEmoji
-            button.title = "\(emoji) \(sessionPct)%"
+            button.title = "\(bell)\(emoji) \(sessionPct)%"
         } else if usageManager.error != nil {
-            button.title = "❌"
+            button.title = "\(bell)❌"
         } else {
-            button.title = "⏳"
+            button.title = "\(bell)⏳"
         }
     }
     
@@ -130,7 +150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 defer: false
             )
             window.title = "ClaudeUsage Settings"
-            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView())
+            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView(sessionMonitor: sessionMonitor))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
@@ -138,6 +158,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         settingsWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let sessionId = response.notification.request.content.userInfo["session_id"] as? String
+        Task { @MainActor in
+            if let sessionId {
+                self.sessionMonitor.focusSession(id: sessionId)
+            }
+            completionHandler()
+        }
     }
 
     @objc func togglePopover() {
