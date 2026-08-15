@@ -419,9 +419,18 @@ class SessionMonitor: ObservableObject {
 
     esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
-    # Terminal identity for click-to-focus (tty of the claude process's terminal)
-    TTY=$(ps -o tty= -p $$ 2>/dev/null | tr -d ' ')
-    [ "$TTY" = "??" ] && TTY=""
+    # Terminal identity for click-to-focus. Hooks run without a controlling
+    # terminal, so walk up the process tree to the claude process, which has one.
+    PID=$$
+    TTY=""
+    HOPS=0
+    while [ "$PID" -gt 1 ] && [ "$HOPS" -lt 10 ]; do
+      T=$(ps -o tty= -p "$PID" 2>/dev/null | tr -d ' ')
+      if [ -n "$T" ] && [ "$T" != "??" ]; then TTY=$T; break; fi
+      PID=$(ps -o ppid= -p "$PID" 2>/dev/null | tr -d ' ')
+      [ -z "$PID" ] && break
+      HOPS=$((HOPS+1))
+    done
 
     printf '{"session_id":"%s","status":"%s","cwd":"%s","message":"%s","term_program":"%s","tty":"%s","updated_at":%s}\n' \
       "$(esc "$SID")" "$STATUS" "$(esc "$CWD")" "$(esc "$MSG")" "$(esc "${TERM_PROGRAM:-}")" "$(esc "$TTY")" "$(date +%s)" > "$FILE"
