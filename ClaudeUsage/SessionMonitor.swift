@@ -254,10 +254,25 @@ class SessionMonitor: ObservableObject {
     }
 
     private func runAppleScript(_ source: String) {
+        // NSAppleScript is not thread-safe and silently no-ops off the main thread;
+        // run osascript as a subprocess instead so focusing never blocks the UI.
+        let logURL = Self.baseDir.appendingPathComponent("focus-debug.log")
         DispatchQueue.global(qos: .userInitiated).async {
-            if let script = NSAppleScript(source: source) {
-                var error: NSDictionary?
-                script.executeAndReturnError(&error)
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", source]
+            let errPipe = Pipe()
+            process.standardOutput = Pipe()
+            process.standardError = errPipe
+            do {
+                try process.run()
+                process.waitUntilExit()
+                let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                let err = String(data: errData, encoding: .utf8) ?? ""
+                let result = "exit=\(process.terminationStatus) \(err)\n"
+                try? result.write(to: logURL, atomically: true, encoding: .utf8)
+            } catch {
+                try? "failed to run osascript: \(error)\n".write(to: logURL, atomically: true, encoding: .utf8)
             }
         }
     }
