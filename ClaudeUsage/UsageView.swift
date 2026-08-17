@@ -144,7 +144,7 @@ struct UsageView: View {
                     sessionMonitor.focusSession(session)
                 }) {
                     HStack(spacing: 8) {
-                        Text(sessionIcon(session.status))
+                        Text(sessionIcon(session))
                             .font(.caption)
 
                         VStack(alignment: .leading, spacing: 1) {
@@ -154,7 +154,7 @@ struct UsageView: View {
                                 .lineLimit(1)
                             Text(sessionLabel(session))
                                 .font(.caption2)
-                                .foregroundColor(session.status == .needsAttention ? .orange : .secondary)
+                                .foregroundColor(session.status == .needsAttention && !session.acknowledged ? .orange : .secondary)
                                 .lineLimit(1)
                         }
 
@@ -175,9 +175,9 @@ struct UsageView: View {
         .padding(.vertical, 8)
     }
 
-    func sessionIcon(_ status: ClaudeSession.Status) -> String {
-        switch status {
-        case .needsAttention: return "🔔"
+    func sessionIcon(_ session: ClaudeSession) -> String {
+        switch session.status {
+        case .needsAttention: return session.acknowledged ? "🔕" : "🔔"
         case .running: return "⚙️"
         case .finished: return "✅"
         }
@@ -186,6 +186,7 @@ struct UsageView: View {
     func sessionLabel(_ session: ClaudeSession) -> String {
         switch session.status {
         case .needsAttention:
+            if session.acknowledged { return "Waiting (seen)" }
             return session.message.isEmpty ? "Needs your input" : session.message
         case .running:
             return "Working…"

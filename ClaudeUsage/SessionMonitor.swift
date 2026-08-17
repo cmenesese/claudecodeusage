@@ -16,6 +16,8 @@ struct ClaudeSession: Identifiable, Equatable {
     let updatedAt: Date
     let termProgram: String
     let tty: String
+    /// User has clicked through to this session since it last asked for attention
+    let acknowledged: Bool
 
     var projectName: String {
         cwd.isEmpty ? "Unknown project" : URL(fileURLWithPath: cwd).lastPathComponent
@@ -54,7 +56,7 @@ class SessionMonitor: ObservableObject {
     static let hookEvents = ["UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
 
     var needsAttentionSessions: [ClaudeSession] {
-        sessions.filter { $0.status == .needsAttention }
+        sessions.filter { $0.status == .needsAttention && !$0.acknowledged }
     }
 
     init() {
@@ -119,7 +121,8 @@ class SessionMonitor: ObservableObject {
                 message: json["message"] as? String ?? "",
                 updatedAt: updatedAt,
                 termProgram: json["term_program"] as? String ?? "",
-                tty: json["tty"] as? String ?? ""
+                tty: json["tty"] as? String ?? "",
+                acknowledged: json["acknowledged"] as? Bool ?? false
             ))
         }
 
@@ -193,6 +196,7 @@ class SessionMonitor: ObservableObject {
 
     /// Bring the terminal window/tab running this session to the front.
     func focusSession(_ session: ClaudeSession) {
+        acknowledge(session)
         let devTTY = session.tty.isEmpty ? nil : "/dev/\(session.tty)"
 
         switch session.termProgram {
@@ -211,6 +215,35 @@ class SessionMonitor: ObservableObject {
     func focusSession(id: String) {
         if let session = sessions.first(where: { $0.id == id }) {
             focusSession(session)
+        }
+    }
+
+    /// Clear the alert for a session the user has jumped to. The sidecar keeps the
+    /// flag until the next hook event overwrites the file with fresh state.
+    private func acknowledge(_ session: ClaudeSession) {
+        guard session.status == .needsAttention, !session.acknowledged else { return }
+
+        let file = Self.sessionsDir.appendingPathComponent("\(session.id).json")
+        if let data = try? Data(contentsOf: file),
+           var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            json["acknowledged"] = true
+            if let out = try? JSONSerialization.data(withJSONObject: json) {
+                try? out.write(to: file, options: .atomic)
+            }
+        }
+
+        // Update in-memory immediately so the bell clears without waiting for the next scan
+        if let idx = sessions.firstIndex(where: { $0.id == session.id }) {
+            sessions[idx] = ClaudeSession(
+                id: session.id,
+                status: session.status,
+                cwd: session.cwd,
+                message: session.message,
+                updatedAt: session.updatedAt,
+                termProgram: session.termProgram,
+                tty: session.tty,
+                acknowledged: true
+            )
         }
     }
 
