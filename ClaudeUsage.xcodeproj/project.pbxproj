@@ -12,6 +12,7 @@
 		003 /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103 /* UsageView.swift */; };
 		005 /* ClaudeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 106 /* ClaudeSettingsView.swift */; };
 		006 /* SessionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107 /* SessionMonitor.swift */; };
+		007 /* StatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108 /* StatusMonitor.swift */; };
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -24,6 +25,7 @@
 		105 /* ClaudeUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudeUsage.entitlements; sourceTree = "<group>"; };
 		106 /* ClaudeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSettingsView.swift; sourceTree = "<group>"; };
 		107 /* SessionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMonitor.swift; sourceTree = "<group>"; };
+		108 /* StatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -53,6 +55,7 @@
 				103 /* UsageView.swift */,
 				106 /* ClaudeSettingsView.swift */,
 				107 /* SessionMonitor.swift */,
+				108 /* StatusMonitor.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -141,6 +144,7 @@
 				003 /* UsageView.swift in Sources */,
 				005 /* ClaudeSettingsView.swift in Sources */,
 				006 /* SessionMonitor.swift in Sources */,
+				007 /* StatusMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -286,7 +290,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.10.3;
+				MARKETING_VERSION = 1.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.helpfully.ClaudeUsage;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -315,7 +319,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.10.3;
+				MARKETING_VERSION = 1.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.helpfully.ClaudeUsage;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
