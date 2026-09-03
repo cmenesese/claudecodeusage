@@ -23,6 +23,10 @@ Built by [@richhickson](https://x.com/richhickson)
 - 📋 **Live session list** in the popover: needs you 🔔 / working ⚙️ / finished ✅
 - 🖱️ **Click-to-focus** - click a session (or its notification) to jump to the exact Terminal/iTerm2 tab it's running in; alerts clear once you've visited the session
 
+### Claude status alerts
+- 🌡️ **Outage notifications** - get notified when [status.claude.com](https://status.claude.com) reports a problem, and again when service recovers (checked every 5 minutes; toggle in settings)
+- 🟢 **Status line in the popover** with a severity dot, linking to the status page
+
 ### Claude Code settings editor
 - 📝 **Edit your global CLAUDE.md** - tell Claude Code how you like to work, from the app
 - 🗓️ **Conversation retention** - set how long Claude Code keeps local transcripts (`cleanupPeriodDays`), preserving all your other settings
