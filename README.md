@@ -32,8 +32,9 @@ Built by [@richhickson](https://x.com/richhickson)
 - 🗓️ **Conversation retention** - set how long Claude Code keeps local transcripts (`cleanupPeriodDays`), preserving all your other settings
 
 ### General
-- 🚀 **Launch at Login** toggle and built-in update checker
-- 🪶 **Lightweight** - Native Swift, minimal resources
+- ⬆️ **One-click in-app updates** - when a new version ships, click "Update & Relaunch" in the popover; the update's code signature is verified before installing
+- 🚀 **Launch at Login** toggle
+- 🪶 **Lightweight** - Native Swift, minimal resources, no frameworks
 
 ## Installation
 
