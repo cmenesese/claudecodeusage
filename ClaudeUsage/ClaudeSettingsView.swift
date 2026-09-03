@@ -88,6 +88,7 @@ class ClaudeConfigManager: ObservableObject {
 
 struct ClaudeSettingsView: View {
     @ObservedObject var sessionMonitor: SessionMonitor
+    @ObservedObject var statusMonitor: StatusMonitor
     @StateObject private var config = ClaudeConfigManager()
     @State private var alertsEnabled = false
 
@@ -182,6 +183,25 @@ struct ClaudeSettingsView: View {
 
                     Divider()
 
+                    // Claude service status alerts
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Claude Status Alerts")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                        Text("Get a notification when status.claude.com reports an outage — and when service recovers. Checked every 5 minutes.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Toggle("Alert when Claude status changes", isOn: Binding(
+                            get: { statusMonitor.alertsEnabled },
+                            set: { statusMonitor.alertsEnabled = $0 }
+                        ))
+                        .toggleStyle(.switch)
+                    }
+
+                    Divider()
+
                     // Conversation retention (settings.json)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Conversation Retention")
@@ -271,5 +291,5 @@ struct ClaudeSettingsView: View {
 }
 
 #Preview {
-    ClaudeSettingsView(sessionMonitor: SessionMonitor())
+    ClaudeSettingsView(sessionMonitor: SessionMonitor(), statusMonitor: StatusMonitor())
 }

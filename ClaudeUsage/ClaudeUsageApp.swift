@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var settingsWindow: NSWindow?
     var usageManager = UsageManager()
     var sessionMonitor = SessionMonitor()
+    var statusMonitor = StatusMonitor()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -38,6 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupWakeNotification()
         setupUsageObserver()
         startFetching()
+        statusMonitor.start()
 
         // Request notification permission after launch completes (too early fails silently)
         if sessionMonitor.hooksInstalled {
@@ -119,7 +121,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 280, height: 320)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager, sessionMonitor: sessionMonitor))
+        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager, sessionMonitor: sessionMonitor, statusMonitor: statusMonitor))
     }
     
     func updateStatusItem() {
@@ -150,7 +152,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 defer: false
             )
             window.title = "ClaudeUsage Settings"
-            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView(sessionMonitor: sessionMonitor))
+            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView(sessionMonitor: sessionMonitor, statusMonitor: statusMonitor))
             window.isReleasedWhenClosed = false
             window.center()
             settingsWindow = window
@@ -173,10 +175,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        let sessionId = response.notification.request.content.userInfo["session_id"] as? String
+        let userInfo = response.notification.request.content.userInfo
+        let sessionId = userInfo["session_id"] as? String
+        let statusURL = userInfo["status_url"] as? String
         Task { @MainActor in
             if let sessionId {
                 self.sessionMonitor.focusSession(id: sessionId)
+            } else if let statusURL, let url = URL(string: statusURL) {
+                NSWorkspace.shared.open(url)
             }
             completionHandler()
         }

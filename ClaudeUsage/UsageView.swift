@@ -5,6 +5,7 @@ import ServiceManagement
 struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @ObservedObject var sessionMonitor: SessionMonitor
+    @ObservedObject var statusMonitor: StatusMonitor
     @Environment(\.openURL) var openURL
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
@@ -68,7 +69,12 @@ struct UsageView: View {
             }
             
             Divider()
-            
+
+            // Claude service status (from status.claude.com)
+            statusRow()
+
+            Divider()
+
             // Footer
             footerView()
         }
@@ -254,6 +260,43 @@ struct UsageView: View {
         .frame(maxWidth: .infinity)
     }
     
+    @ViewBuilder
+    func statusRow() -> some View {
+        if let indicator = statusMonitor.indicator {
+            Button(action: {
+                openURL(URL(string: StatusMonitor.statusPageURL)!)
+            }) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(statusColor(indicator))
+                        .frame(width: 8, height: 8)
+                    Text(statusMonitor.statusDescription.isEmpty ? "Claude status" : statusMonitor.statusDescription)
+                        .font(.caption)
+                        .foregroundColor(indicator == "none" ? .secondary : .primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(statusMonitor.incidentName.isEmpty ? "Open status.claude.com" : statusMonitor.incidentName)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+        }
+    }
+
+    func statusColor(_ indicator: String) -> Color {
+        switch indicator {
+        case "none": return .green
+        case "minor": return .yellow
+        case "major": return .orange
+        default: return .red // critical
+        }
+    }
+
     @ViewBuilder
     func footerView() -> some View {
         VStack(spacing: 8) {
@@ -496,5 +539,5 @@ struct OverageRow: View {
 }
 
 #Preview {
-    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor())
+    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor(), statusMonitor: StatusMonitor())
 }
