@@ -37,6 +37,7 @@ class UsageManager: ObservableObject {
     @Published var isLoading = false
     @Published var lastUpdated: Date?
     @Published var updateAvailable: String?
+    @Published var updateDownloadURL: URL?
 
     static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let githubRepo = "richhickson/claudecodeusage"
@@ -308,6 +309,12 @@ class UsageManager: ObservableObject {
                 let latestVersion = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
                 if isNewerVersion(latestVersion, than: Self.currentVersion) {
                     updateAvailable = latestVersion
+                    // Zip asset URL for in-app update
+                    if let assets = json["assets"] as? [[String: Any]],
+                       let zip = assets.first(where: { ($0["name"] as? String) == "ClaudeUsage.zip" }),
+                       let urlString = zip["browser_download_url"] as? String {
+                        updateDownloadURL = URL(string: urlString)
+                    }
                 }
             }
         } catch {

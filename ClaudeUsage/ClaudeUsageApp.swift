@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var usageManager = UsageManager()
     var sessionMonitor = SessionMonitor()
     var statusMonitor = StatusMonitor()
+    var updateInstaller = UpdateInstaller()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -121,7 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 280, height: 320)
         popover?.behavior = .transient
-        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager, sessionMonitor: sessionMonitor, statusMonitor: statusMonitor))
+        popover?.contentViewController = NSHostingController(rootView: UsageView(manager: usageManager, sessionMonitor: sessionMonitor, statusMonitor: statusMonitor, updateInstaller: updateInstaller))
     }
     
     func updateStatusItem() {
