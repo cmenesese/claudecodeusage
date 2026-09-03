@@ -6,6 +6,7 @@ struct UsageView: View {
     @ObservedObject var manager: UsageManager
     @ObservedObject var sessionMonitor: SessionMonitor
     @ObservedObject var statusMonitor: StatusMonitor
+    @ObservedObject var updateInstaller: UpdateInstaller
     @Environment(\.openURL) var openURL
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
@@ -37,19 +38,7 @@ struct UsageView: View {
             
             // Update available banner
             if let newVersion = manager.updateAvailable {
-                Button(action: {
-                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.down.circle.fill")
-                        Text("Update Available: v\(newVersion)")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .padding(.horizontal)
-                .padding(.vertical, 8)
+                updateBanner(newVersion)
             }
 
             Divider()
@@ -260,6 +249,64 @@ struct UsageView: View {
         .frame(maxWidth: .infinity)
     }
     
+    @ViewBuilder
+    func updateBanner(_ newVersion: String) -> some View {
+        VStack(spacing: 4) {
+            switch updateInstaller.state {
+            case .idle:
+                if let downloadURL = manager.updateDownloadURL {
+                    Button(action: {
+                        Task { await updateInstaller.installUpdate(from: downloadURL) }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Update to v\(newVersion) & Relaunch")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                } else {
+                    // No zip asset found — fall back to manual download
+                    Button(action: {
+                        openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.down.circle.fill")
+                            Text("Update Available: v\(newVersion)")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+                }
+            case .downloading:
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Downloading v\(newVersion)…").font(.caption)
+                }
+            case .installing:
+                HStack(spacing: 8) {
+                    ProgressView().scaleEffect(0.6)
+                    Text("Verifying & installing…").font(.caption)
+                }
+            case .relaunching:
+                Text("Relaunching…").font(.caption)
+            case .failed(let message):
+                Text("Update failed: \(message)")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Download manually") {
+                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
+                }
+                .font(.caption)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+
     @ViewBuilder
     func statusRow() -> some View {
         if let indicator = statusMonitor.indicator {
@@ -539,5 +586,5 @@ struct OverageRow: View {
 }
 
 #Preview {
-    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor(), statusMonitor: StatusMonitor())
+    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor(), statusMonitor: StatusMonitor(), updateInstaller: UpdateInstaller())
 }
