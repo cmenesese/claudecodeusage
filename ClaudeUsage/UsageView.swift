@@ -3,10 +3,13 @@ import AppKit
 import ServiceManagement
 
 struct UsageView: View {
-    @ObservedObject var manager: UsageManager
-    @ObservedObject var sessionMonitor: SessionMonitor
+    let accounts: [ClaudeAccount]
+    let usageManagers: [UsageManager]
+    let sessionMonitors: [SessionMonitor]
     @ObservedObject var statusMonitor: StatusMonitor
+    @ObservedObject var updateChecker: AppUpdateChecker
     @ObservedObject var updateInstaller: UpdateInstaller
+    @StateObject private var combinedSessions = CombinedSessionsStore()
     @Environment(\.openURL) var openURL
     @State private var launchAtLogin: Bool = {
         if #available(macOS 13.0, *) {
@@ -14,7 +17,12 @@ struct UsageView: View {
         }
         return false
     }()
-    
+
+    private var anyLoading: Bool { usageManagers.contains { $0.isLoading } }
+    private var mostRecentUpdate: Date? {
+        usageManagers.compactMap(\.lastUpdated).max()
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -28,35 +36,34 @@ struct UsageView: View {
                     .foregroundColor(.secondary)
                 Spacer()
 
-                if manager.isLoading {
+                if anyLoading {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
-            
+
             // Update available banner
-            if let newVersion = manager.updateAvailable {
+            if let newVersion = updateChecker.updateAvailable {
                 updateBanner(newVersion)
             }
 
             Divider()
 
-            // Live Claude Code sessions (when alert hooks are installed)
-            if sessionMonitor.hooksInstalled && !sessionMonitor.sessions.isEmpty {
+            // Live Claude Code sessions (when alert hooks are installed for any account)
+            if !combinedSessions.sessions.isEmpty {
                 sessionsSection()
                 Divider()
             }
 
-            if let error = manager.error {
-                errorView(error)
-            } else if let usage = manager.usage {
-                usageContent(usage)
-            } else {
-                loadingView()
+            ForEach(Array(zip(accounts, usageManagers)), id: \.0.id) { account, manager in
+                AccountUsageSection(account: account, manager: manager, showsHeader: accounts.count > 1)
+                if account.id != accounts.last?.id {
+                    Divider()
+                }
             }
-            
+
             Divider()
 
             // Claude service status (from status.claude.com)
@@ -68,63 +75,11 @@ struct UsageView: View {
             footerView()
         }
         .frame(width: 280)
-    }
-    
-    @ViewBuilder
-    func usageContent(_ usage: UsageData) -> some View {
-        VStack(spacing: 16) {
-            // Session usage
-            UsageRow(
-                title: "Session",
-                subtitle: "5-hour window",
-                percentage: usage.sessionPercentage,
-                resetsAt: usage.sessionResetsAt,
-                color: colorForPercentage(usage.sessionPercentage)
-            )
-            
-            // Weekly usage
-            UsageRow(
-                title: "Weekly",
-                subtitle: "7-day window",
-                percentage: usage.weeklyPercentage,
-                resetsAt: usage.weeklyResetsAt,
-                color: colorForPercentage(usage.weeklyPercentage)
-            )
-            
-            // Model-scoped weekly limits (Fable, Opus, etc.)
-            ForEach(usage.modelLimits, id: \.name) { limit in
-                UsageRow(
-                    title: limit.name,
-                    subtitle: "Model weekly limit",
-                    percentage: limit.percentage,
-                    resetsAt: limit.resetsAt,
-                    color: colorForPercentage(limit.percentage)
-                )
-            }
-
-            // Sonnet only (if available)
-            if let sonnetPct = usage.sonnetPercentage {
-                UsageRow(
-                    title: "Sonnet Only",
-                    subtitle: "Model-specific",
-                    percentage: sonnetPct,
-                    resetsAt: usage.sonnetResetsAt,
-                    color: colorForPercentage(sonnetPct)
-                )
-            }
-
-            // Extra usage / overage (if enabled)
-            if usage.extraUsageEnabled, let limit = usage.extraUsageMonthlyLimit, let used = usage.extraUsageUsedCredits {
-                OverageRow(
-                    usedDollars: used / 100,
-                    limitDollars: limit / 100,
-                    percentage: usage.extraUsagePercentage ?? 0
-                )
-            }
+        .onAppear {
+            combinedSessions.configure(accounts: accounts, sessionMonitors: sessionMonitors)
         }
-        .padding()
     }
-    
+
     @ViewBuilder
     func sessionsSection() -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -133,29 +88,36 @@ struct UsageView: View {
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
 
-            ForEach(sessionMonitor.sessions) { session in
+            ForEach(combinedSessions.sessions) { labeled in
                 Button(action: {
                     AppDelegate.shared?.popover?.performClose(nil)
-                    sessionMonitor.focusSession(session)
+                    sessionMonitor(for: labeled.account)?.focusSession(labeled.session)
                 }) {
                     HStack(spacing: 8) {
-                        Text(sessionIcon(session))
+                        Text(sessionIcon(labeled.session))
                             .font(.caption)
 
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(session.projectName)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .lineLimit(1)
-                            Text(sessionLabel(session))
+                            HStack(spacing: 4) {
+                                Text(labeled.session.projectName)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .lineLimit(1)
+                                if accounts.count > 1 {
+                                    Text("· \(labeled.account.name)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            Text(sessionLabel(labeled.session))
                                 .font(.caption2)
-                                .foregroundColor(session.status == .needsAttention && !session.acknowledged ? .orange : .secondary)
+                                .foregroundColor(labeled.session.status == .needsAttention && !labeled.session.acknowledged ? .orange : .secondary)
                                 .lineLimit(1)
                         }
 
                         Spacer()
 
-                        Text(session.updatedAt.formatted(.relative(presentation: .named)))
+                        Text(labeled.session.updatedAt.formatted(.relative(presentation: .named)))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
@@ -168,6 +130,11 @@ struct UsageView: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
+    }
+
+    private func sessionMonitor(for account: ClaudeAccount) -> SessionMonitor? {
+        guard let index = accounts.firstIndex(of: account) else { return nil }
+        return sessionMonitors[index]
     }
 
     func sessionIcon(_ session: ClaudeSession) -> String {
@@ -191,70 +158,11 @@ struct UsageView: View {
     }
 
     @ViewBuilder
-    func errorView(_ error: String) -> some View {
-        VStack(spacing: 12) {
-            if error.contains("Not logged in") {
-                Image(systemName: "person.crop.circle.badge.questionmark")
-                    .font(.largeTitle)
-                    .foregroundColor(.blue)
-
-                Text("Not Signed In")
-                    .font(.headline)
-
-                Text("This app uses credentials from Claude Code stored in the macOS Keychain.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Text("Please run `claude` in Terminal and log in first.")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-
-                Button("Open Terminal & Run Claude") {
-                    launchClaudeCLI()
-                }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 4)
-
-                Button("Install Claude Code") {
-                    openURL(URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview")!)
-                }
-                .buttonStyle(.borderless)
-                .font(.caption)
-            } else {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.largeTitle)
-                    .foregroundColor(.orange)
-
-                Text(error)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-    }
-    
-    @ViewBuilder
-    func loadingView() -> some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text("Loading usage data...")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity)
-    }
-    
-    @ViewBuilder
     func updateBanner(_ newVersion: String) -> some View {
         VStack(spacing: 4) {
             switch updateInstaller.state {
             case .idle:
-                if let downloadURL = manager.updateDownloadURL {
+                if let downloadURL = updateChecker.updateDownloadURL {
                     Button(action: {
                         Task { await updateInstaller.installUpdate(from: downloadURL) }
                     }) {
@@ -348,7 +256,7 @@ struct UsageView: View {
     func footerView() -> some View {
         VStack(spacing: 8) {
             Button(action: {
-                Task { await manager.checkForUpdates() }
+                Task { await updateChecker.checkForUpdates() }
             }) {
                 HStack {
                     Image(systemName: "arrow.triangle.2.circlepath")
@@ -378,7 +286,7 @@ struct UsageView: View {
             Divider()
 
             HStack {
-                if let lastUpdated = manager.lastUpdated {
+                if let lastUpdated = mostRecentUpdate {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -387,12 +295,18 @@ struct UsageView: View {
                 Spacer()
 
                 Button(action: {
-                    Task { await manager.refresh() }
+                    Task {
+                        await withTaskGroup(of: Void.self) { group in
+                            for manager in usageManagers {
+                                group.addTask { await manager.refresh() }
+                            }
+                        }
+                    }
                 }) {
                     Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.borderless)
-                .disabled(manager.isLoading)
+                .disabled(anyLoading)
 
                 Button(action: {
                     openURL(URL(string: "https://claude.ai")!)
@@ -432,7 +346,169 @@ struct UsageView: View {
         }
         .background(Color(NSColor.controlBackgroundColor))
     }
-    
+
+    func launchClaudeCLI() {
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "claude"
+        end tell
+        """
+        if let appleScript = NSAppleScript(source: script) {
+            var error: NSDictionary?
+            appleScript.executeAndReturnError(&error)
+        }
+    }
+}
+
+/// One account's usage block: header (when more than one account is shown),
+/// then either its error, its data, or a loading spinner — independent of
+/// every other account's state.
+private struct AccountUsageSection: View {
+    let account: ClaudeAccount
+    @ObservedObject var manager: UsageManager
+    let showsHeader: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if showsHeader {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(ClaudeAccountDiscovery.activeAccountName == account.name ? Color.green : Color.secondary.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                    Text(account.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.top, 12)
+            }
+
+            if let error = manager.error {
+                errorView(error)
+            } else if let usage = manager.usage {
+                usageContent(usage)
+            } else {
+                loadingView()
+            }
+        }
+    }
+
+    @ViewBuilder
+    func usageContent(_ usage: UsageData) -> some View {
+        VStack(spacing: 16) {
+            // Session usage
+            UsageRow(
+                title: "Session",
+                subtitle: "5-hour window",
+                percentage: usage.sessionPercentage,
+                resetsAt: usage.sessionResetsAt,
+                color: colorForPercentage(usage.sessionPercentage)
+            )
+
+            // Weekly usage
+            UsageRow(
+                title: "Weekly",
+                subtitle: "7-day window",
+                percentage: usage.weeklyPercentage,
+                resetsAt: usage.weeklyResetsAt,
+                color: colorForPercentage(usage.weeklyPercentage)
+            )
+
+            // Model-scoped weekly limits (Fable, Opus, etc.)
+            ForEach(usage.modelLimits, id: \.name) { limit in
+                UsageRow(
+                    title: limit.name,
+                    subtitle: "Model weekly limit",
+                    percentage: limit.percentage,
+                    resetsAt: limit.resetsAt,
+                    color: colorForPercentage(limit.percentage)
+                )
+            }
+
+            // Sonnet only (if available)
+            if let sonnetPct = usage.sonnetPercentage {
+                UsageRow(
+                    title: "Sonnet Only",
+                    subtitle: "Model-specific",
+                    percentage: sonnetPct,
+                    resetsAt: usage.sonnetResetsAt,
+                    color: colorForPercentage(sonnetPct)
+                )
+            }
+
+            // Extra usage / overage (if enabled)
+            if usage.extraUsageEnabled, let limit = usage.extraUsageMonthlyLimit, let used = usage.extraUsageUsedCredits {
+                OverageRow(
+                    usedDollars: used / 100,
+                    limitDollars: limit / 100,
+                    percentage: usage.extraUsagePercentage ?? 0
+                )
+            }
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    func errorView(_ error: String) -> some View {
+        VStack(spacing: 12) {
+            if error.contains("Not logged in") {
+                Image(systemName: "person.crop.circle.badge.questionmark")
+                    .font(.largeTitle)
+                    .foregroundColor(.blue)
+
+                Text("Not Signed In")
+                    .font(.headline)
+
+                Text("This app uses credentials from Claude Code stored in the macOS Keychain.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text("Please run `claude` in Terminal and log in first.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Button("Open Terminal & Run Claude") {
+                    launchClaudeCLI()
+                }
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+
+                Button("Install Claude Code") {
+                    NSWorkspace.shared.open(URL(string: "https://docs.anthropic.com/en/docs/claude-code/overview")!)
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            } else {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.largeTitle)
+                    .foregroundColor(.orange)
+
+                Text(error)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    func loadingView() -> some View {
+        VStack(spacing: 12) {
+            ProgressView()
+            Text("Loading usage data...")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+    }
+
     func colorForPercentage(_ pct: Int) -> Color {
         if pct >= 90 { return .red }
         if pct >= 70 { return .orange }
@@ -459,7 +535,7 @@ struct UsageRow: View {
     let percentage: Int
     let resetsAt: Date?
     let color: Color
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -471,29 +547,29 @@ struct UsageRow: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                
+
                 Spacer()
-                
+
                 Text("\(percentage)%")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(color)
             }
-            
+
             // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color(NSColor.separatorColor))
                         .frame(height: 8)
-                    
+
                     RoundedRectangle(cornerRadius: 4)
                         .fill(color)
                         .frame(width: geometry.size.width * CGFloat(percentage) / 100, height: 8)
                 }
             }
             .frame(height: 8)
-            
+
             // Reset time
             if let resetsAt = resetsAt {
                 HStack {
@@ -509,22 +585,22 @@ struct UsageRow: View {
         .background(Color(NSColor.controlBackgroundColor))
         .cornerRadius(8)
     }
-    
+
     func formatTimeRemaining(_ date: Date) -> String {
         let now = Date()
         let diff = date.timeIntervalSince(now)
-        
+
         if diff <= 0 { return "soon" }
-        
+
         let hours = Int(diff / 3600)
         let minutes = Int((diff.truncatingRemainder(dividingBy: 3600)) / 60)
-        
+
         if hours > 24 {
             let days = hours / 24
             let remainingHours = hours % 24
             return "in \(days)d \(remainingHours)h"
         }
-        
+
         return "in \(hours)h \(minutes)m"
     }
 }
@@ -586,5 +662,13 @@ struct OverageRow: View {
 }
 
 #Preview {
-    UsageView(manager: UsageManager(), sessionMonitor: SessionMonitor(), statusMonitor: StatusMonitor(), updateInstaller: UpdateInstaller())
+    let account = ClaudeAccount(id: "default", name: "default", configDir: ClaudeAccountDiscovery.legacyClaudeDir, isLegacyDefault: true)
+    UsageView(
+        accounts: [account],
+        usageManagers: [UsageManager(account: account)],
+        sessionMonitors: [SessionMonitor(account: account)],
+        statusMonitor: StatusMonitor(),
+        updateChecker: AppUpdateChecker(),
+        updateInstaller: UpdateInstaller()
+    )
 }

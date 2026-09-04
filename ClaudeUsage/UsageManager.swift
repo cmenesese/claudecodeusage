@@ -32,15 +32,17 @@ struct UsageData {
 
 @MainActor
 class UsageManager: ObservableObject {
+    let account: ClaudeAccount
+
     @Published var usage: UsageData?
     @Published var error: String?
     @Published var isLoading = false
     @Published var lastUpdated: Date?
-    @Published var updateAvailable: String?
-    @Published var updateDownloadURL: URL?
 
-    static let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-    static let githubRepo = "richhickson/claudecodeusage"
+    init(account: ClaudeAccount) {
+        self.account = account
+    }
+
     static let claudeCodeVersion: String = {
         // Detect installed Claude Code version for User-Agent
         let process = Process()
@@ -133,7 +135,7 @@ class UsageManager: ObservableObject {
         // Use security CLI which is already in the keychain ACL
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        process.arguments = ["find-generic-password", "-s", account.keychainServiceName, "-w"]
 
         let pipe = Pipe()
         let errorPipe = Pipe()
@@ -153,7 +155,7 @@ class UsageManager: ObservableObject {
 
         guard process.terminationStatus == 0 else {
             // Try alternate keychain entry as fallback
-            if let token = try? getAccessTokenFromAlternateKeychain() {
+            if account.isLegacyDefault, let token = try? getAccessTokenFromAlternateKeychain() {
                 return token
             }
             // Include error detail for debugging
@@ -165,7 +167,7 @@ class UsageManager: ObservableObject {
 
         guard let jsonString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
               !jsonString.isEmpty else {
-            if let token = try? getAccessTokenFromAlternateKeychain() {
+            if account.isLegacyDefault, let token = try? getAccessTokenFromAlternateKeychain() {
                 return token
             }
             throw KeychainError.notLoggedIn
@@ -192,7 +194,10 @@ class UsageManager: ObservableObject {
         throw KeychainError.invalidCredentialFormat
     }
 
-    /// Fallback: Check for "Claude Code" keychain entry (alternate storage location)
+    /// Fallback: Check for "Claude Code" keychain entry (alternate storage location).
+    /// Only tried for the legacy default account — this item isn't scoped by
+    /// CLAUDE_CONFIG_DIR, so using it for a named account risks silently showing
+    /// another account's data.
     private func getAccessTokenFromAlternateKeychain() throws -> String {
         // Use security CLI which is already in the keychain ACL
         let process = Process()
@@ -295,45 +300,6 @@ class UsageManager: ObservableObject {
         return formatter.date(from: string)
     }
 
-    func checkForUpdates() async {
-        guard let url = URL(string: "https://api.github.com/repos/\(Self.githubRepo)/releases/latest") else { return }
-
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github.v3+json", forHTTPHeaderField: "Accept")
-        request.setValue("ClaudeUsage/\(Self.currentVersion)", forHTTPHeaderField: "User-Agent")
-
-        do {
-            let (data, _) = try await urlSession.data(for: request)
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let tagName = json["tag_name"] as? String {
-                let latestVersion = tagName.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
-                if isNewerVersion(latestVersion, than: Self.currentVersion) {
-                    updateAvailable = latestVersion
-                    // Zip asset URL for in-app update
-                    if let assets = json["assets"] as? [[String: Any]],
-                       let zip = assets.first(where: { ($0["name"] as? String) == "ClaudeUsage.zip" }),
-                       let urlString = zip["browser_download_url"] as? String {
-                        updateDownloadURL = URL(string: urlString)
-                    }
-                }
-            }
-        } catch {
-            // Silently fail - update check is not critical
-        }
-    }
-
-    private func isNewerVersion(_ latest: String, than current: String) -> Bool {
-        let latestParts = latest.split(separator: ".").compactMap { Int($0) }
-        let currentParts = current.split(separator: ".").compactMap { Int($0) }
-
-        for i in 0..<max(latestParts.count, currentParts.count) {
-            let l = i < latestParts.count ? latestParts[i] : 0
-            let c = i < currentParts.count ? currentParts[i] : 0
-            if l > c { return true }
-            if l < c { return false }
-        }
-        return false
-    }
 }
 
 enum KeychainError: LocalizedError {
