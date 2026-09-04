@@ -10,8 +10,13 @@ struct ModelLimit {
 }
 
 struct UsageData {
+    /// Whether the API returned a `five_hour`/`seven_day` block at all for this account,
+    /// rather than `null`. Budget-only (e.g. Enterprise) accounts get `null` for both —
+    /// there's no rate limit to show, as opposed to a real 0% of a real limit.
+    let hasSessionLimit: Bool
     let sessionUtilization: Double
     let sessionResetsAt: Date?
+    let hasWeeklyLimit: Bool
     let weeklyUtilization: Double
     let weeklyResetsAt: Date?
     let sonnetUtilization: Double?
@@ -75,7 +80,12 @@ class UsageManager: ObservableObject {
     var statusEmoji: String {
         guard let usage = usage else { return "❓" }
         let maxModelUtil = usage.modelLimits.map(\.utilization).max() ?? 0
-        let maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization, maxModelUtil)
+        var maxUtil = max(usage.sessionUtilization, usage.weeklyUtilization, maxModelUtil)
+        // Budget-only accounts (e.g. Enterprise) have no session/weekly rate limits at all —
+        // fall back to overage % so the icon isn't stuck green regardless of spend.
+        if !usage.hasSessionLimit && !usage.hasWeeklyLimit && maxModelUtil == 0 {
+            maxUtil = Double(usage.extraUsagePercentage ?? 0)
+        }
         if maxUtil >= 90 { return "🔴" }
         if maxUtil >= 70 { return "🟡" }
         return "🟢"
@@ -276,8 +286,10 @@ class UsageManager: ObservableObject {
         }
 
         return UsageData(
+            hasSessionLimit: fiveHour != nil,
             sessionUtilization: fiveHour?["utilization"] as? Double ?? 0,
             sessionResetsAt: parseDate(fiveHour?["resets_at"] as? String),
+            hasWeeklyLimit: sevenDay != nil,
             weeklyUtilization: sevenDay?["utilization"] as? Double ?? 0,
             weeklyResetsAt: parseDate(sevenDay?["resets_at"] as? String),
             sonnetUtilization: sonnet?["utilization"] as? Double,

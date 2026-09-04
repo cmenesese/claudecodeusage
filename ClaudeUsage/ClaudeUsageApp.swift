@@ -193,9 +193,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         let prefix = (accounts.count > 1 && !account.isLegacyDefault) ? "\(account.name) " : ""
 
         if let usage = manager.usage {
-            let sessionPct = usage.sessionPercentage
             let emoji = manager.statusEmoji
-            button.title = "\(bell)\(prefix)\(emoji) \(sessionPct)%"
+            let valueText: String
+            if !usage.hasSessionLimit && !usage.hasWeeklyLimit,
+               let used = usage.extraUsageUsedCredits, let limit = usage.extraUsageMonthlyLimit {
+                // Budget-only account (e.g. Enterprise) — no session/weekly % to show,
+                // so show spend against the monthly budget instead.
+                valueText = "$\(Int(used / 100))/$\(Int(limit / 100))"
+            } else {
+                valueText = "\(usage.sessionPercentage)%"
+            }
+            button.title = "\(bell)\(prefix)\(emoji) \(valueText)"
         } else if manager.error != nil {
             button.title = "\(bell)\(prefix)❌"
         } else {

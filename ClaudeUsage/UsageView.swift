@@ -398,23 +398,28 @@ private struct AccountUsageSection: View {
     @ViewBuilder
     func usageContent(_ usage: UsageData) -> some View {
         VStack(spacing: 16) {
-            // Session usage
-            UsageRow(
-                title: "Session",
-                subtitle: "5-hour window",
-                percentage: usage.sessionPercentage,
-                resetsAt: usage.sessionResetsAt,
-                color: colorForPercentage(usage.sessionPercentage)
-            )
+            // Session usage (hidden for budget-only accounts, e.g. Enterprise, where
+            // the API returns no five_hour block at all)
+            if usage.hasSessionLimit {
+                UsageRow(
+                    title: "Session",
+                    subtitle: "5-hour window",
+                    percentage: usage.sessionPercentage,
+                    resetsAt: usage.sessionResetsAt,
+                    color: colorForPercentage(usage.sessionPercentage)
+                )
+            }
 
-            // Weekly usage
-            UsageRow(
-                title: "Weekly",
-                subtitle: "7-day window",
-                percentage: usage.weeklyPercentage,
-                resetsAt: usage.weeklyResetsAt,
-                color: colorForPercentage(usage.weeklyPercentage)
-            )
+            // Weekly usage (hidden for budget-only accounts, see above)
+            if usage.hasWeeklyLimit {
+                UsageRow(
+                    title: "Weekly",
+                    subtitle: "7-day window",
+                    percentage: usage.weeklyPercentage,
+                    resetsAt: usage.weeklyResetsAt,
+                    color: colorForPercentage(usage.weeklyPercentage)
+                )
+            }
 
             // Model-scoped weekly limits (Fable, Opus, etc.)
             ForEach(usage.modelLimits, id: \.name) { limit in
