@@ -316,14 +316,6 @@ struct UsageView: View {
                 .buttonStyle(.borderless)
 
                 Button(action: {
-                    AppDelegate.shared?.openSettingsWindow()
-                }) {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.borderless)
-                .help("Claude Code settings (CLAUDE.md, retention)")
-
-                Button(action: {
                     NSApplication.shared.terminate(nil)
                 }) {
                     Image(systemName: "xmark.circle")
@@ -331,17 +323,6 @@ struct UsageView: View {
                 .buttonStyle(.borderless)
             }
             .padding(.horizontal)
-
-            Divider()
-
-            Button(action: {
-                openURL(URL(string: "https://x.com/richhickson")!)
-            }) {
-                Text("Created by @richhickson")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .buttonStyle(.borderless)
             .padding(.bottom, 8)
         }
         .background(Color(NSColor.controlBackgroundColor))
