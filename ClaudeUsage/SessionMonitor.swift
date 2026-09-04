@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import UserNotifications
+import Combine
 
 struct ClaudeSession: Identifiable, Equatable {
     enum Status: String {
@@ -25,9 +26,11 @@ struct ClaudeSession: Identifiable, Equatable {
 }
 
 /// Watches session status sidecar files written by the ClaudeUsage hook script
-/// installed into Claude Code's settings.json.
+/// installed into one Claude account's settings.json.
 @MainActor
 class SessionMonitor: ObservableObject {
+    let account: ClaudeAccount
+
     @Published var sessions: [ClaudeSession] = []
     @Published var hooksInstalled = false
     /// nil = not yet determined, true = allowed, false = denied in System Settings
@@ -46,10 +49,10 @@ class SessionMonitor: ObservableObject {
     private var timer: Timer?
     private var notifiedKeys = Set<String>()
 
-    static let baseDir = ClaudeConfigManager.claudeDir.appendingPathComponent("claudeusage")
-    static let sessionsDir = baseDir.appendingPathComponent("sessions")
-    static let hookScriptURL = baseDir.appendingPathComponent("session-hook.sh")
-    static let settingsURL = ClaudeConfigManager.claudeDir.appendingPathComponent("settings.json")
+    var baseDir: URL { account.configDir.appendingPathComponent("claudeusage") }
+    var sessionsDir: URL { baseDir.appendingPathComponent("sessions") }
+    var hookScriptURL: URL { baseDir.appendingPathComponent("session-hook.sh") }
+    var settingsURL: URL { account.configDir.appendingPathComponent("settings.json") }
 
     /// Substring that identifies our hook entries in settings.json
     static let hookMarker = "claudeusage/session-hook.sh"
@@ -59,8 +62,9 @@ class SessionMonitor: ObservableObject {
         sessions.filter { $0.status == .needsAttention && !$0.acknowledged }
     }
 
-    init() {
-        hooksInstalled = Self.checkHooksInstalled()
+    init(account: ClaudeAccount) {
+        self.account = account
+        hooksInstalled = Self.checkHooksInstalled(settingsURL: account.configDir.appendingPathComponent("settings.json"))
         refreshNotificationAuthStatus()
         if hooksInstalled {
             // Keep the installed hook script up to date with this app version
@@ -90,7 +94,7 @@ class SessionMonitor: ObservableObject {
 
     private func scan() {
         let fm = FileManager.default
-        guard let files = try? fm.contentsOfDirectory(at: Self.sessionsDir, includingPropertiesForKeys: nil) else {
+        guard let files = try? fm.contentsOfDirectory(at: sessionsDir, includingPropertiesForKeys: nil) else {
             if !sessions.isEmpty { sessions = [] }
             return
         }
@@ -178,12 +182,12 @@ class SessionMonitor: ObservableObject {
             guard popupNotificationsEnabled else { continue }
 
             let content = UNMutableNotificationContent()
-            content.title = "Claude Code needs you"
+            content.title = account.isLegacyDefault ? "Claude Code needs you" : "Claude Code (\(account.name)) needs you"
             content.body = session.message.isEmpty
                 ? session.projectName
                 : "\(session.projectName): \(session.message)"
             content.sound = .default
-            content.userInfo = ["session_id": session.id]
+            content.userInfo = ["session_id": session.id, "account_id": account.id]
 
             UNUserNotificationCenter.current().add(
                 UNNotificationRequest(identifier: key, content: content, trigger: nil)
@@ -223,7 +227,7 @@ class SessionMonitor: ObservableObject {
     private func acknowledge(_ session: ClaudeSession) {
         guard session.status == .needsAttention, !session.acknowledged else { return }
 
-        let file = Self.sessionsDir.appendingPathComponent("\(session.id).json")
+        let file = sessionsDir.appendingPathComponent("\(session.id).json")
         if let data = try? Data(contentsOf: file),
            var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
             json["acknowledged"] = true
@@ -256,7 +260,7 @@ class SessionMonitor: ObservableObject {
     private func runAppleScript(_ source: String) {
         // NSAppleScript is not thread-safe and silently no-ops off the main thread;
         // run osascript as a subprocess instead so focusing never blocks the UI.
-        let logURL = Self.baseDir.appendingPathComponent("focus-debug.log")
+        let logURL = baseDir.appendingPathComponent("focus-debug.log")
         DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -347,7 +351,7 @@ class SessionMonitor: ObservableObject {
 
     // MARK: - Hook install
 
-    static func checkHooksInstalled() -> Bool {
+    static func checkHooksInstalled(settingsURL: URL) -> Bool {
         guard let data = try? Data(contentsOf: settingsURL),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let hooks = json["hooks"] as? [String: Any] else { return false }
@@ -364,16 +368,16 @@ class SessionMonitor: ObservableObject {
 
     private func writeHookScript() throws {
         let fm = FileManager.default
-        try fm.createDirectory(at: Self.sessionsDir, withIntermediateDirectories: true)
-        try Self.hookScript.write(to: Self.hookScriptURL, atomically: true, encoding: .utf8)
-        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: Self.hookScriptURL.path)
+        try fm.createDirectory(at: sessionsDir, withIntermediateDirectories: true)
+        try hookScript.write(to: hookScriptURL, atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookScriptURL.path)
     }
 
     private func installHooks() throws {
         try writeHookScript()
 
         var json: [String: Any] = [:]
-        if let data = try? Data(contentsOf: Self.settingsURL) {
+        if let data = try? Data(contentsOf: settingsURL) {
             guard let existing = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
                 throw SessionMonitorError.invalidSettingsJson
             }
@@ -382,7 +386,7 @@ class SessionMonitor: ObservableObject {
 
         var hooks = json["hooks"] as? [String: Any] ?? [:]
         let ourEntry: [String: Any] = [
-            "hooks": [["type": "command", "command": Self.hookScriptURL.path]]
+            "hooks": [["type": "command", "command": hookScriptURL.path]]
         ]
 
         for event in Self.hookEvents {
@@ -400,11 +404,11 @@ class SessionMonitor: ObservableObject {
 
         json["hooks"] = hooks
         let data = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: Self.settingsURL, options: .atomic)
+        try data.write(to: settingsURL, options: .atomic)
     }
 
     private func uninstallHooks() throws {
-        if let data = try? Data(contentsOf: Self.settingsURL),
+        if let data = try? Data(contentsOf: settingsURL),
            var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
            var hooks = json["hooks"] as? [String: Any] {
 
@@ -429,19 +433,25 @@ class SessionMonitor: ObservableObject {
             }
 
             let out = try JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys])
-            try out.write(to: Self.settingsURL, options: .atomic)
+            try out.write(to: settingsURL, options: .atomic)
         }
 
-        try? FileManager.default.removeItem(at: Self.baseDir)
+        try? FileManager.default.removeItem(at: baseDir)
     }
 
     /// POSIX sh script — no jq/python dependencies. Writes one JSON sidecar per session.
-    static let hookScript = #"""
+    ///
+    /// DIR is interpolated to this account's sessions directory at write time rather
+    /// than read from $CLAUDE_CONFIG_DIR at runtime — Claude Code hooks aren't
+    /// confirmed to inherit that env var, and a fixed path removes the dependency
+    /// entirely. Each account gets its own copy of this script.
+    var hookScript: String {
+        #"""
     #!/bin/sh
     # ClaudeUsage session status hook (installed by ClaudeUsage.app)
     # Reads the Claude Code hook event from stdin and writes a status sidecar
     # file that the ClaudeUsage menu bar app watches.
-    DIR="$HOME/.claude/claudeusage/sessions"
+    DIR="\#(sessionsDir.path)"
     mkdir -p "$DIR" 2>/dev/null
     INPUT=$(cat)
 
@@ -484,6 +494,7 @@ class SessionMonitor: ObservableObject {
       "$(esc "$SID")" "$STATUS" "$(esc "$CWD")" "$(esc "$MSG")" "$(esc "${TERM_PROGRAM:-}")" "$(esc "$TTY")" "$(date +%s)" > "$FILE"
     exit 0
     """#
+    }
 }
 
 enum SessionMonitorError: LocalizedError {
@@ -494,5 +505,45 @@ enum SessionMonitorError: LocalizedError {
         case .invalidSettingsJson:
             return "settings.json is not valid JSON — not modifying it"
         }
+    }
+}
+
+struct LabeledSession: Identifiable, Equatable {
+    let session: ClaudeSession
+    let account: ClaudeAccount
+    var id: String { "\(account.id):\(session.id)" }
+}
+
+/// Merges `.sessions` from every account's `SessionMonitor` into one
+/// sorted, account-labeled list for the "CLAUDE SESSIONS" UI section.
+@MainActor
+class CombinedSessionsStore: ObservableObject {
+    @Published private(set) var sessions: [LabeledSession] = []
+
+    private var cancellables = Set<AnyCancellable>()
+    private var accounts: [ClaudeAccount] = []
+    private var sessionMonitors: [SessionMonitor] = []
+
+    func configure(accounts: [ClaudeAccount], sessionMonitors: [SessionMonitor]) {
+        cancellables.removeAll()
+        self.accounts = accounts
+        self.sessionMonitors = sessionMonitors
+
+        for monitor in sessionMonitors {
+            monitor.$sessions
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.recompute() }
+                .store(in: &cancellables)
+        }
+        recompute()
+    }
+
+    private func recompute() {
+        var all: [LabeledSession] = []
+        for (account, monitor) in zip(accounts, sessionMonitors) {
+            all.append(contentsOf: monitor.sessions.map { LabeledSession(session: $0, account: account) })
+        }
+        all.sort { $0.session.updatedAt > $1.session.updatedAt }
+        sessions = all
     }
 }

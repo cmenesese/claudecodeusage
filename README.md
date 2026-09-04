@@ -31,6 +31,12 @@ Built by [@richhickson](https://x.com/richhickson)
 - 📝 **Edit your global CLAUDE.md** - tell Claude Code how you like to work, from the app
 - 🗓️ **Conversation retention** - set how long Claude Code keeps local transcripts (`cleanupPeriodDays`), preserving all your other settings
 
+### Multi-account (`CLAUDE_CONFIG_DIR`)
+- 👥 **Per-account usage, live and simultaneously** - if you run multiple Claude accounts via `CLAUDE_CONFIG_DIR` (e.g. `~/.claude-accounts/work`, `~/.claude-accounts/personal`), the app discovers each one automatically and shows its own session/weekly/model limits, independently, without needing an open `claude` session for either
+- 🔔 **Session alerts per account** - the hooks and notifications above install into each account's own `settings.json`; alerts are labeled with the account name
+- ⚙️ **Settings editor picks the account** - CLAUDE.md, retention, and session-alert toggles apply to whichever account is selected
+- 🔁 **Falls back to single-account mode** automatically if `~/.claude-accounts/` doesn't exist - nothing changes for everyone else
+
 ### General
 - ⬆️ **One-click in-app updates** - when a new version ships, click "Update & Relaunch" in the popover; the update's code signature is verified before installing
 - 🚀 **Launch at Login** toggle
@@ -90,6 +96,12 @@ Claude Usage reads your Claude Code OAuth credentials from macOS Keychain and qu
 Session alerts work via Claude Code's hooks system: a tiny shell script reports each session's status (working / needs attention / finished) to JSON sidecar files in `~/.claude/claudeusage/`, which the app watches. Everything stays on your machine.
 
 **Note:** This uses an undocumented API that could change at any time. The app will gracefully handle API changes but may stop working if Anthropic modifies the endpoint.
+
+### Multi-account credential lookup
+
+When `CLAUDE_CONFIG_DIR` is set (e.g. by a shell function that runs `CLAUDE_CONFIG_DIR="$HOME/.claude-accounts/work" claude`), Claude Code stores that account's OAuth token under a Keychain item named `Claude Code-credentials-<hash>`, where `<hash>` is the first 8 hex characters of `SHA-256(<absolute path to CLAUDE_CONFIG_DIR>)` — e.g. `SHA-256("/Users/you/.claude-accounts/work")[:8]`. Claude Usage discovers accounts under `~/.claude-accounts/` and computes this hash per account to read each one's credentials independently.
+
+This algorithm isn't documented by Anthropic — it was reverse-engineered by comparing calculated hashes against real Keychain item names, and could change in a future Claude Code release without notice. If a computed hash stops matching, the app shows a specific "no credential found" error for that account rather than crashing or silently showing stale data.
 
 ## Privacy
 

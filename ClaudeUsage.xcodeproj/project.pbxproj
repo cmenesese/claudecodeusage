@@ -14,6 +14,8 @@
 		006 /* SessionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107 /* SessionMonitor.swift */; };
 		007 /* StatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108 /* StatusMonitor.swift */; };
 		008 /* UpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109 /* UpdateInstaller.swift */; };
+		009 /* ClaudeAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110 /* ClaudeAccount.swift */; };
+		010 /* AppUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* AppUpdateChecker.swift */; };
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +30,8 @@
 		107 /* SessionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMonitor.swift; sourceTree = "<group>"; };
 		108 /* StatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMonitor.swift; sourceTree = "<group>"; };
 		109 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
+		110 /* ClaudeAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAccount.swift; sourceTree = "<group>"; };
+		111 /* AppUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateChecker.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +63,8 @@
 				107 /* SessionMonitor.swift */,
 				108 /* StatusMonitor.swift */,
 				109 /* UpdateInstaller.swift */,
+				110 /* ClaudeAccount.swift */,
+				111 /* AppUpdateChecker.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -149,6 +155,8 @@
 				006 /* SessionMonitor.swift in Sources */,
 				007 /* StatusMonitor.swift in Sources */,
 				008 /* UpdateInstaller.swift in Sources */,
+				009 /* ClaudeAccount.swift in Sources */,
+				010 /* AppUpdateChecker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
