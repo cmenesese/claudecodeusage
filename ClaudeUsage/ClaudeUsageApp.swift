@@ -19,12 +19,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     var statusItem: NSStatusItem?
     var popover: NSPopover?
-    var settingsWindow: NSWindow?
 
     var accounts: [ClaudeAccount] = []
     var usageManagers: [UsageManager] = []
     var sessionMonitors: [SessionMonitor] = []
-    var configManagers: [ClaudeConfigManager] = []
 
     var statusMonitor = StatusMonitor()
     var updateChecker = AppUpdateChecker()
@@ -48,7 +46,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         accounts = ClaudeAccountDiscovery.discoverAccounts()
         usageManagers = accounts.map { UsageManager(account: $0) }
         sessionMonitors = accounts.map { SessionMonitor(account: $0) }
-        configManagers = accounts.map { ClaudeConfigManager(account: $0) }
 
         setupStatusItem()
         setupPopover()
@@ -209,32 +206,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         } else {
             button.title = "\(bell)\(prefix)⏳"
         }
-    }
-
-    func openSettingsWindow() {
-        popover?.performClose(nil)
-
-        if settingsWindow == nil {
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 520, height: 520),
-                styleMask: [.titled, .closable, .miniaturizable],
-                backing: .buffered,
-                defer: false
-            )
-            window.title = "ClaudeUsage Settings"
-            window.contentViewController = NSHostingController(rootView: ClaudeSettingsView(
-                accounts: accounts,
-                sessionMonitors: sessionMonitors,
-                configManagers: configManagers,
-                statusMonitor: statusMonitor
-            ))
-            window.isReleasedWhenClosed = false
-            window.center()
-            settingsWindow = window
-        }
-
-        settingsWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
     }
 
     nonisolated func userNotificationCenter(
