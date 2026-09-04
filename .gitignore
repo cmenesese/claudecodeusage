@@ -16,3 +16,6 @@ DerivedData/
 .DS_Store
 *.swp
 *~
+
+# Local planning docs / working notes (not part of the shipped project)
+Artifacts/
