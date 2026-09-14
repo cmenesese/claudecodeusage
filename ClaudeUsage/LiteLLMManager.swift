@@ -36,7 +36,6 @@ class LiteLLMManager: ObservableObject {
     @Published var isLoading = false
     @Published var lastUpdated: Date?
 
-    private static let proxyBaseURL = URL(string: "https://proxy-llm.infra.buk.cl")!
     private let config: LiteLLMConfig
 
     init(config: LiteLLMConfig = .shared) {
@@ -63,7 +62,7 @@ class LiteLLMManager: ObservableObject {
     }
 
     private func refreshWithRetry(retriesRemaining: Int, backoffSeconds: UInt64 = 2) async {
-        guard let userID = config.userID, !userID.isEmpty else {
+        guard let userID = config.userID, !userID.isEmpty, let proxyBaseURL = config.proxyURL else {
             error = LiteLLMError.notConfigured.localizedDescription
             return
         }
@@ -73,8 +72,8 @@ class LiteLLMManager: ObservableObject {
 
         do {
             let apiKey = try config.readAPIKeyFromKeychain()
-            async let spendTask = fetchSpend(userID: userID, apiKey: apiKey)
-            async let activityTask = fetchDailyActivity(apiKey: apiKey)
+            async let spendTask = fetchSpend(baseURL: proxyBaseURL, userID: userID, apiKey: apiKey)
+            async let activityTask = fetchDailyActivity(baseURL: proxyBaseURL, apiKey: apiKey)
             let (spendResult, activityResult) = try await (spendTask, activityTask)
             spend = spendResult
             dailyActivity = activityResult
@@ -105,8 +104,8 @@ class LiteLLMManager: ObservableObject {
         }
     }
 
-    private func fetchSpend(userID: String, apiKey: String) async throws -> LiteLLMSpendData {
-        var components = URLComponents(url: Self.proxyBaseURL.appendingPathComponent("spend/users"), resolvingAgainstBaseURL: false)!
+    private func fetchSpend(baseURL: URL, userID: String, apiKey: String) async throws -> LiteLLMSpendData {
+        var components = URLComponents(url: baseURL.appendingPathComponent("spend/users"), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "user_id", value: userID)]
 
         var request = URLRequest(url: components.url!)
@@ -145,10 +144,10 @@ class LiteLLMManager: ObservableObject {
         )
     }
 
-    private func fetchDailyActivity(apiKey: String) async throws -> LiteLLMDailyActivity {
+    private func fetchDailyActivity(baseURL: URL, apiKey: String) async throws -> LiteLLMDailyActivity {
         let today = Self.dateOnlyFormatter.string(from: Date())
 
-        var components = URLComponents(url: Self.proxyBaseURL.appendingPathComponent("user/daily/activity"), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: baseURL.appendingPathComponent("user/daily/activity"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "start_date", value: today),
             URLQueryItem(name: "end_date", value: today)
@@ -222,7 +221,7 @@ enum LiteLLMError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "LiteLLM is not configured. Enter your User ID in Settings."
+        case .notConfigured: return "LiteLLM is not configured. Enter your Proxy URL and User ID in Settings."
         case .invalidResponse: return "Invalid response from the LiteLLM proxy"
         case .apiError(let code):
             if code == 401 || code == 403 { return "Invalid or unauthorized LiteLLM API key" }

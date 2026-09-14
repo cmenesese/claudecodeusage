@@ -1,13 +1,15 @@
 import Foundation
 
-/// Local configuration for LiteLLM: User ID (not secret, in UserDefaults)
-/// + reads the API key already provisioned in Keychain (com.buk.litellm / api-key).
-/// The app never writes the API key — it only reads it and reports if it's missing.
+/// Local configuration for LiteLLM: User ID and proxy URL (not secret, in
+/// UserDefaults) + reads the API key already provisioned in Keychain
+/// (com.litellm / api-key). The app never writes the API key — it only
+/// reads it and reports if it's missing.
 final class LiteLLMConfig {
     static let shared = LiteLLMConfig()
 
     private static let userIDDefaultsKey = "litellm.userID"
-    private static let keychainService = "com.buk.litellm"
+    private static let proxyURLDefaultsKey = "litellm.proxyURL"
+    private static let keychainService = "com.litellm"
     private static let keychainAccount = "api-key"
 
     private let defaults: UserDefaults
@@ -18,8 +20,20 @@ final class LiteLLMConfig {
         set { defaults.set(newValue, forKey: Self.userIDDefaultsKey) }
     }
 
+    /// The LiteLLM proxy base URL, e.g. "https://proxy-llm.infra.buk.cl".
+    /// No default — each install points at its own proxy.
+    var proxyURLString: String? {
+        get { defaults.string(forKey: Self.proxyURLDefaultsKey) }
+        set { defaults.set(newValue, forKey: Self.proxyURLDefaultsKey) }
+    }
+
+    var proxyURL: URL? {
+        guard let proxyURLString, !proxyURLString.isEmpty else { return nil }
+        return URL(string: proxyURLString)
+    }
+
     var isConfigured: Bool {
-        guard let userID, !userID.isEmpty else { return false }
+        guard let userID, !userID.isEmpty, proxyURL != nil else { return false }
         return (try? readAPIKeyFromKeychain()) != nil
     }
 
