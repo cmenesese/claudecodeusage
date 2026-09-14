@@ -9,6 +9,7 @@ struct UsageView: View {
     @ObservedObject var statusMonitor: StatusMonitor
     @ObservedObject var updateChecker: AppUpdateChecker
     @ObservedObject var updateInstaller: UpdateInstaller
+    @ObservedObject var liteLLMManager: LiteLLMManager
     @StateObject private var combinedSessions = CombinedSessionsStore()
     @Environment(\.openURL) var openURL
     @State private var launchAtLogin: Bool = {
@@ -40,6 +41,14 @@ struct UsageView: View {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
+
+                Button(action: {
+                    LiteLLMSettingsWindowController.shared.show()
+                }) {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.borderless)
+                .help("LiteLLM Settings")
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
@@ -63,6 +72,10 @@ struct UsageView: View {
                     Divider()
                 }
             }
+
+            Divider()
+
+            LiteLLMUsageSection(manager: liteLLMManager)
 
             Divider()
 
@@ -300,6 +313,7 @@ struct UsageView: View {
                             for manager in usageManagers {
                                 group.addTask { await manager.refresh() }
                             }
+                            group.addTask { await liteLLMManager.refresh() }
                         }
                     }
                 }) {
@@ -655,6 +669,7 @@ struct OverageRow: View {
         sessionMonitors: [SessionMonitor(account: account)],
         statusMonitor: StatusMonitor(),
         updateChecker: AppUpdateChecker(),
-        updateInstaller: UpdateInstaller()
+        updateInstaller: UpdateInstaller(),
+        liteLLMManager: LiteLLMManager()
     )
 }

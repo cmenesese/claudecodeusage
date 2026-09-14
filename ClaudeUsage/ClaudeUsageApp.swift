@@ -23,6 +23,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var accounts: [ClaudeAccount] = []
     var usageManagers: [UsageManager] = []
     var sessionMonitors: [SessionMonitor] = []
+    var liteLLMManager = LiteLLMManager()
 
     var statusMonitor = StatusMonitor()
     var updateChecker = AppUpdateChecker()
@@ -107,6 +108,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 .sink { [weak self] _ in self?.updateStatusItem() }
                 .store(in: &cancellables)
         }
+
+        liteLLMManager.$spend
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &cancellables)
+
+        liteLLMManager.$error
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateStatusItem() }
+            .store(in: &cancellables)
     }
 
     @objc func handleWake() {
@@ -122,6 +133,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             for manager in usageManagers {
                 group.addTask { await manager.refresh() }
             }
+            group.addTask { await self.liteLLMManager.refresh() }
         }
     }
 
@@ -168,7 +180,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             sessionMonitors: sessionMonitors,
             statusMonitor: statusMonitor,
             updateChecker: updateChecker,
-            updateInstaller: updateInstaller
+            updateInstaller: updateInstaller,
+            liteLLMManager: liteLLMManager
         ))
     }
 
