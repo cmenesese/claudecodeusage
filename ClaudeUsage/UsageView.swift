@@ -7,8 +7,6 @@ struct UsageView: View {
     let usageManagers: [UsageManager]
     let sessionMonitors: [SessionMonitor]
     @ObservedObject var statusMonitor: StatusMonitor
-    @ObservedObject var updateChecker: AppUpdateChecker
-    @ObservedObject var updateInstaller: UpdateInstaller
     @ObservedObject var liteLLMManager: LiteLLMManager
     @StateObject private var combinedSessions = CombinedSessionsStore()
     @Environment(\.openURL) var openURL
@@ -52,11 +50,6 @@ struct UsageView: View {
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
-
-            // Update available banner
-            if let newVersion = updateChecker.updateAvailable {
-                updateBanner(newVersion)
-            }
 
             Divider()
 
@@ -171,64 +164,6 @@ struct UsageView: View {
     }
 
     @ViewBuilder
-    func updateBanner(_ newVersion: String) -> some View {
-        VStack(spacing: 4) {
-            switch updateInstaller.state {
-            case .idle:
-                if let downloadURL = updateChecker.updateDownloadURL {
-                    Button(action: {
-                        Task { await updateInstaller.installUpdate(from: downloadURL) }
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text("Update to v\(newVersion) & Relaunch")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                } else {
-                    // No zip asset found — fall back to manual download
-                    Button(action: {
-                        openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.down.circle.fill")
-                            Text("Update Available: v\(newVersion)")
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.green)
-                }
-            case .downloading:
-                HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.6)
-                    Text("Downloading v\(newVersion)…").font(.caption)
-                }
-            case .installing:
-                HStack(spacing: 8) {
-                    ProgressView().scaleEffect(0.6)
-                    Text("Verifying & installing…").font(.caption)
-                }
-            case .relaunching:
-                Text("Relaunching…").font(.caption)
-            case .failed(let message):
-                Text("Update failed: \(message)")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button("Download manually") {
-                    openURL(URL(string: "https://github.com/richhickson/claudecodeusage/releases/latest")!)
-                }
-                .font(.caption)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
-
-    @ViewBuilder
     func statusRow() -> some View {
         if let indicator = statusMonitor.indicator {
             Button(action: {
@@ -268,18 +203,6 @@ struct UsageView: View {
     @ViewBuilder
     func footerView() -> some View {
         VStack(spacing: 8) {
-            Button(action: {
-                Task { await updateChecker.checkForUpdates() }
-            }) {
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Check for Updates")
-                }
-            }
-            .buttonStyle(.borderless)
-            .font(.caption)
-            .padding(.top, 8)
-
             Toggle("Launch at Login", isOn: $launchAtLogin)
                 .toggleStyle(.checkbox)
                 .font(.caption)
@@ -668,8 +591,6 @@ struct OverageRow: View {
         usageManagers: [UsageManager(account: account)],
         sessionMonitors: [SessionMonitor(account: account)],
         statusMonitor: StatusMonitor(),
-        updateChecker: AppUpdateChecker(),
-        updateInstaller: UpdateInstaller(),
         liteLLMManager: LiteLLMManager()
     )
 }

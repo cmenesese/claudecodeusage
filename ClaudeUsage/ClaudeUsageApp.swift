@@ -26,8 +26,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     var liteLLMManager = LiteLLMManager()
 
     var statusMonitor = StatusMonitor()
-    var updateChecker = AppUpdateChecker()
-    var updateInstaller = UpdateInstaller()
     var timer: Timer?
     var cancellables = Set<AnyCancellable>()
 
@@ -149,7 +147,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             }
 
             await refreshAllAccounts()
-            await updateChecker.checkForUpdates()
         }
 
         // Refresh every 5 minutes
@@ -179,8 +176,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             usageManagers: usageManagers,
             sessionMonitors: sessionMonitors,
             statusMonitor: statusMonitor,
-            updateChecker: updateChecker,
-            updateInstaller: updateInstaller,
             liteLLMManager: liteLLMManager
         ))
     }

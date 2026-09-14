@@ -12,9 +12,7 @@
 		003 /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103 /* UsageView.swift */; };
 		006 /* SessionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 107 /* SessionMonitor.swift */; };
 		007 /* StatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 108 /* StatusMonitor.swift */; };
-		008 /* UpdateInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109 /* UpdateInstaller.swift */; };
 		009 /* ClaudeAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110 /* ClaudeAccount.swift */; };
-		010 /* AppUpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* AppUpdateChecker.swift */; };
 		011 /* LiteLLMManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112 /* LiteLLMManager.swift */; };
 		012 /* LiteLLMConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113 /* LiteLLMConfig.swift */; };
 		013 /* LiteLLMSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114 /* LiteLLMSettingsView.swift */; };
@@ -31,9 +29,7 @@
 		105 /* ClaudeUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ClaudeUsage.entitlements; sourceTree = "<group>"; };
 		107 /* SessionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionMonitor.swift; sourceTree = "<group>"; };
 		108 /* StatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMonitor.swift; sourceTree = "<group>"; };
-		109 /* UpdateInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateInstaller.swift; sourceTree = "<group>"; };
 		110 /* ClaudeAccount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeAccount.swift; sourceTree = "<group>"; };
-		111 /* AppUpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateChecker.swift; sourceTree = "<group>"; };
 		112 /* LiteLLMManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMManager.swift; sourceTree = "<group>"; };
 		113 /* LiteLLMConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMConfig.swift; sourceTree = "<group>"; };
 		114 /* LiteLLMSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMSettingsView.swift; sourceTree = "<group>"; };
@@ -67,9 +63,7 @@
 				103 /* UsageView.swift */,
 				107 /* SessionMonitor.swift */,
 				108 /* StatusMonitor.swift */,
-				109 /* UpdateInstaller.swift */,
 				110 /* ClaudeAccount.swift */,
-				111 /* AppUpdateChecker.swift */,
 				112 /* LiteLLMManager.swift */,
 				113 /* LiteLLMConfig.swift */,
 				114 /* LiteLLMSettingsView.swift */,
@@ -162,9 +156,7 @@
 				003 /* UsageView.swift in Sources */,
 				006 /* SessionMonitor.swift in Sources */,
 				007 /* StatusMonitor.swift in Sources */,
-				008 /* UpdateInstaller.swift in Sources */,
 				009 /* ClaudeAccount.swift in Sources */,
-				010 /* AppUpdateChecker.swift in Sources */,
 				011 /* LiteLLMManager.swift in Sources */,
 				012 /* LiteLLMConfig.swift in Sources */,
 				013 /* LiteLLMSettingsView.swift in Sources */,
