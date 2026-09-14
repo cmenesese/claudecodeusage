@@ -4,6 +4,7 @@ import SwiftUI
 /// `AccountUsageSection` in UsageView.swift.
 struct LiteLLMUsageSection: View {
     @ObservedObject var manager: LiteLLMManager
+    let onOpenSettings: () -> Void
     @Environment(\.openURL) var openURL
 
     var body: some View {
@@ -116,7 +117,7 @@ struct LiteLLMUsageSection: View {
                 .multilineTextAlignment(.center)
 
             Button("Open Settings") {
-                LiteLLMSettingsWindowController.shared.show()
+                onOpenSettings()
             }
             .buttonStyle(.borderless)
             .font(.caption)

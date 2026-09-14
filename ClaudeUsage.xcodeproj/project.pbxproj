@@ -17,6 +17,8 @@
 		012 /* LiteLLMConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 113 /* LiteLLMConfig.swift */; };
 		013 /* LiteLLMSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 114 /* LiteLLMSettingsView.swift */; };
 		014 /* LiteLLMUsageSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115 /* LiteLLMUsageSection.swift */; };
+		015 /* SettingsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116 /* SettingsComponents.swift */; };
+		016 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117 /* SettingsView.swift */; };
 		004 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 104 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -34,6 +36,8 @@
 		113 /* LiteLLMConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMConfig.swift; sourceTree = "<group>"; };
 		114 /* LiteLLMSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMSettingsView.swift; sourceTree = "<group>"; };
 		115 /* LiteLLMUsageSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiteLLMUsageSection.swift; sourceTree = "<group>"; };
+		116 /* SettingsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsComponents.swift; sourceTree = "<group>"; };
+		117 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +72,8 @@
 				113 /* LiteLLMConfig.swift */,
 				114 /* LiteLLMSettingsView.swift */,
 				115 /* LiteLLMUsageSection.swift */,
+				116 /* SettingsComponents.swift */,
+				117 /* SettingsView.swift */,
 				104 /* Assets.xcassets */,
 				105 /* ClaudeUsage.entitlements */,
 			);
@@ -161,6 +167,8 @@
 				012 /* LiteLLMConfig.swift in Sources */,
 				013 /* LiteLLMSettingsView.swift in Sources */,
 				014 /* LiteLLMUsageSection.swift in Sources */,
+				015 /* SettingsComponents.swift in Sources */,
+				016 /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

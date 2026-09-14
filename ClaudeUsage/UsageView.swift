@@ -1,6 +1,5 @@
 import SwiftUI
 import AppKit
-import ServiceManagement
 
 struct UsageView: View {
     let accounts: [ClaudeAccount]
@@ -8,13 +7,10 @@ struct UsageView: View {
     let sessionMonitors: [SessionMonitor]
     @ObservedObject var liteLLMManager: LiteLLMManager
     @StateObject private var combinedSessions = CombinedSessionsStore()
-    @Environment(\.openURL) var openURL
-    @State private var launchAtLogin: Bool = {
-        if #available(macOS 13.0, *) {
-            return SMAppService.mainApp.status == .enabled
-        }
-        return false
-    }()
+    @State private var showingSettings = false
+
+    private static let usageSize = NSSize(width: 280, height: 320)
+    private static let settingsSize = NSSize(width: 280, height: 280)
 
     private var anyLoading: Bool { usageManagers.contains { $0.isLoading } }
     private var mostRecentUpdate: Date? {
@@ -22,6 +18,22 @@ struct UsageView: View {
     }
 
     var body: some View {
+        Group {
+            if showingSettings {
+                SettingsView(isVisible: showingSettings, onBack: { showingSettings = false })
+            } else {
+                usageContent
+            }
+        }
+        .onChange(of: showingSettings) { isShowing in
+            AppDelegate.shared?.popover?.contentSize = isShowing ? Self.settingsSize : Self.usageSize
+        }
+        .onAppear {
+            combinedSessions.configure(accounts: accounts, sessionMonitors: sessionMonitors)
+        }
+    }
+
+    private var usageContent: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
@@ -38,14 +50,6 @@ struct UsageView: View {
                     ProgressView()
                         .scaleEffect(0.7)
                 }
-
-                Button(action: {
-                    LiteLLMSettingsWindowController.shared.show()
-                }) {
-                    Image(systemName: "gearshape")
-                }
-                .buttonStyle(.borderless)
-                .help("LiteLLM Settings")
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
@@ -67,7 +71,7 @@ struct UsageView: View {
 
             Divider()
 
-            LiteLLMUsageSection(manager: liteLLMManager)
+            LiteLLMUsageSection(manager: liteLLMManager, onOpenSettings: { showingSettings = true })
 
             Divider()
 
@@ -75,9 +79,6 @@ struct UsageView: View {
             footerView()
         }
         .frame(width: 280)
-        .onAppear {
-            combinedSessions.configure(accounts: accounts, sessionMonitors: sessionMonitors)
-        }
     }
 
     @ViewBuilder
@@ -160,24 +161,6 @@ struct UsageView: View {
     @ViewBuilder
     func footerView() -> some View {
         VStack(spacing: 8) {
-            Toggle("Launch at Login", isOn: $launchAtLogin)
-                .toggleStyle(.checkbox)
-                .font(.caption)
-                .onChange(of: launchAtLogin) { newValue in
-                    do {
-                        if newValue {
-                            try SMAppService.mainApp.register()
-                        } else {
-                            try SMAppService.mainApp.unregister()
-                        }
-                    } catch {
-                        launchAtLogin = !newValue
-                    }
-                }
-                .padding(.horizontal)
-
-            Divider()
-
             HStack {
                 if let lastUpdated = mostRecentUpdate {
                     Text("Updated \(lastUpdated.formatted(.relative(presentation: .named)))")
@@ -203,11 +186,12 @@ struct UsageView: View {
                 .disabled(anyLoading)
 
                 Button(action: {
-                    openURL(URL(string: "https://claude.ai")!)
+                    showingSettings = true
                 }) {
-                    Image(systemName: "globe")
+                    Image(systemName: "gearshape")
                 }
                 .buttonStyle(.borderless)
+                .help("Settings")
 
                 Button(action: {
                     NSApplication.shared.terminate(nil)
@@ -217,7 +201,7 @@ struct UsageView: View {
                 .buttonStyle(.borderless)
             }
             .padding(.horizontal)
-            .padding(.bottom, 8)
+            .padding(.vertical, 8)
         }
         .background(Color(NSColor.controlBackgroundColor))
     }

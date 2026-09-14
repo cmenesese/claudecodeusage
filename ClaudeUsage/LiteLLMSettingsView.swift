@@ -1,7 +1,15 @@
 import SwiftUI
 import AppKit
 
+/// LiteLLM configuration, embedded directly in the popover's Settings screen
+/// (previously its own NSWindow via LiteLLMSettingsWindowController).
 struct LiteLLMSettingsView: View {
+    /// Whether the Settings screen is the one currently shown in the popover.
+    /// Since this view can stay mounted across popover show/hide, onAppear
+    /// alone won't catch every re-entry into Settings — this drives an
+    /// explicit Keychain re-check whenever the screen becomes visible again.
+    let isVisible: Bool
+
     @State private var proxyURLString: String = LiteLLMConfig.shared.proxyURLString ?? ""
     @State private var userID: String = LiteLLMConfig.shared.userID ?? ""
     @State private var keychainStatus: KeychainStatus = .checking
@@ -16,25 +24,44 @@ struct LiteLLMSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section("LiteLLM") {
-                TextField("Proxy URL", text: $proxyURLString, prompt: Text("https://your-litellm-proxy.example.com"))
+        SettingsSection(title: "LiteLLM") {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Proxy URL")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("", text: $proxyURLString, prompt: Text("https://your-litellm-proxy.example.com"))
+                    .textFieldStyle(.roundedBorder)
                     .onSubmit { LiteLLMConfig.shared.proxyURLString = proxyURLString }
-                TextField("User ID", text: $userID)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("User ID")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("", text: $userID)
+                    .textFieldStyle(.roundedBorder)
                     .onSubmit { LiteLLMConfig.shared.userID = userID }
-                keychainStatusRow
-                Button(isTesting ? "Testing…" : "Test Connection") {
-                    Task { await testConnection() }
+            }
+
+            SettingsStatusRow(color: keychainStatus == .found ? .green : .red, text: keychainStatusText)
+
+            Button(isTesting ? "Testing…" : "Test Connection") {
+                Task { await testConnection() }
+            }
+            .disabled(userID.isEmpty || !isProxyURLValid || keychainStatus != .found || isTesting)
+
+            if let testResult {
+                switch testResult {
+                case .success:
+                    SettingsResultLabel(success: true, text: "Connected successfully")
+                case .failure(let message):
+                    SettingsResultLabel(success: false, text: message)
                 }
-                .disabled(userID.isEmpty || !isProxyURLValid || keychainStatus != .found || isTesting)
-                if let testResult { testResultRow(testResult) }
             }
         }
-        .padding(20)
-        .frame(width: 380)
         .onAppear { refreshKeychainStatus() }
-        .onReceive(NotificationCenter.default.publisher(for: .liteLLMSettingsWindowShown)) { _ in
-            refreshKeychainStatus()
+        .onChange(of: isVisible) { visible in
+            if visible { refreshKeychainStatus() }
         }
         .onChange(of: proxyURLString) { _ in
             LiteLLMConfig.shared.proxyURLString = proxyURLString
@@ -44,40 +71,11 @@ struct LiteLLMSettingsView: View {
         }
     }
 
-    @ViewBuilder
-    private var keychainStatusRow: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(keychainStatus == .found ? Color.green : Color.red)
-                .frame(width: 8, height: 8)
-            switch keychainStatus {
-            case .checking:
-                Text("Checking Keychain…")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            case .found:
-                Text("API key found")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            case .missing:
-                Text("com.litellm not found in Keychain")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func testResultRow(_ result: TestResult) -> some View {
-        switch result {
-        case .success:
-            Label("Connected successfully", systemImage: "checkmark.circle.fill")
-                .font(.caption)
-                .foregroundColor(.green)
-        case .failure(let message):
-            Label(message, systemImage: "xmark.circle.fill")
-                .font(.caption)
-                .foregroundColor(.red)
+    private var keychainStatusText: String {
+        switch keychainStatus {
+        case .checking: return "Checking Keychain…"
+        case .found: return "API key found"
+        case .missing: return "com.litellm not found in Keychain"
         }
     }
 
@@ -100,38 +98,8 @@ struct LiteLLMSettingsView: View {
     }
 }
 
-/// Simple window controller hosting `LiteLLMSettingsView`, mirroring the pattern
-/// of the now-removed ClaudeSettingsView window — new and minimal, without the
-/// session/retention controls that were deliberately dropped.
-@MainActor
-final class LiteLLMSettingsWindowController: NSWindowController {
-    static let shared = LiteLLMSettingsWindowController()
-
-    private init() {
-        let hostingController = NSHostingController(rootView: LiteLLMSettingsView())
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "LiteLLM Settings"
-        window.styleMask = [.titled, .closable]
-        window.isReleasedWhenClosed = false
-        super.init(window: window)
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func show() {
-        window?.center()
-        window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        NotificationCenter.default.post(name: .liteLLMSettingsWindowShown, object: nil)
-    }
-}
-
-extension Notification.Name {
-    static let liteLLMSettingsWindowShown = Notification.Name("liteLLMSettingsWindowShown")
-}
-
 #Preview {
-    LiteLLMSettingsView()
+    LiteLLMSettingsView(isVisible: true)
+        .padding()
+        .frame(width: 280)
 }
