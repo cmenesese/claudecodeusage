@@ -175,7 +175,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             accounts: accounts,
             usageManagers: usageManagers,
             sessionMonitors: sessionMonitors,
-            statusMonitor: statusMonitor,
             liteLLMManager: liteLLMManager
         ))
     }

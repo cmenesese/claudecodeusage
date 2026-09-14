@@ -6,7 +6,6 @@ struct UsageView: View {
     let accounts: [ClaudeAccount]
     let usageManagers: [UsageManager]
     let sessionMonitors: [SessionMonitor]
-    @ObservedObject var statusMonitor: StatusMonitor
     @ObservedObject var liteLLMManager: LiteLLMManager
     @StateObject private var combinedSessions = CombinedSessionsStore()
     @Environment(\.openURL) var openURL
@@ -69,11 +68,6 @@ struct UsageView: View {
             Divider()
 
             LiteLLMUsageSection(manager: liteLLMManager)
-
-            Divider()
-
-            // Claude service status (from status.claude.com)
-            statusRow()
 
             Divider()
 
@@ -160,43 +154,6 @@ struct UsageView: View {
             return "Working…"
         case .finished:
             return "Finished"
-        }
-    }
-
-    @ViewBuilder
-    func statusRow() -> some View {
-        if let indicator = statusMonitor.indicator {
-            Button(action: {
-                openURL(URL(string: StatusMonitor.statusPageURL)!)
-            }) {
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(statusColor(indicator))
-                        .frame(width: 8, height: 8)
-                    Text(statusMonitor.statusDescription.isEmpty ? "Claude status" : statusMonitor.statusDescription)
-                        .font(.caption)
-                        .foregroundColor(indicator == "none" ? .secondary : .primary)
-                        .lineLimit(1)
-                    Spacer()
-                    Image(systemName: "arrow.up.right.square")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help(statusMonitor.incidentName.isEmpty ? "Open status.claude.com" : statusMonitor.incidentName)
-            .padding(.horizontal)
-            .padding(.vertical, 6)
-        }
-    }
-
-    func statusColor(_ indicator: String) -> Color {
-        switch indicator {
-        case "none": return .green
-        case "minor": return .yellow
-        case "major": return .orange
-        default: return .red // critical
         }
     }
 
@@ -590,7 +547,6 @@ struct OverageRow: View {
         accounts: [account],
         usageManagers: [UsageManager(account: account)],
         sessionMonitors: [SessionMonitor(account: account)],
-        statusMonitor: StatusMonitor(),
         liteLLMManager: LiteLLMManager()
     )
 }
