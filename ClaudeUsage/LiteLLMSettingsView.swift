@@ -1,17 +1,12 @@
 import SwiftUI
 import AppKit
 
-/// LiteLLM configuration, embedded directly in the popover's Settings screen
-/// (previously its own NSWindow via LiteLLMSettingsWindowController).
+/// LiteLLM configuration, embedded directly in the popover's Settings screen.
 struct LiteLLMSettingsView: View {
-    /// Whether the Settings screen is the one currently shown in the popover.
-    /// Since this view can stay mounted across popover show/hide, onAppear
-    /// alone won't catch every re-entry into Settings — this drives an
-    /// explicit Keychain re-check whenever the screen becomes visible again.
     let isVisible: Bool
 
     @State private var proxyURLString: String = LiteLLMConfig.shared.proxyURLString ?? ""
-    @State private var userID: String = LiteLLMConfig.shared.userID ?? ""
+    @State private var email: String = LiteLLMConfig.shared.email ?? ""
     @State private var keychainStatus: KeychainStatus = .checking
     @State private var testResult: TestResult?
     @State private var isTesting = false
@@ -35,12 +30,15 @@ struct LiteLLMSettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("User ID")
+                Text("Email")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                TextField("", text: $userID)
+                TextField("", text: $email, prompt: Text("you@buk.cl"))
                     .textFieldStyle(.roundedBorder)
-                    .onSubmit { LiteLLMConfig.shared.userID = userID }
+                    .onSubmit {
+                        LiteLLMConfig.shared.email = email
+                        refreshKeychainStatus()
+                    }
             }
 
             SettingsStatusRow(color: keychainStatus == .found ? .green : .red, text: keychainStatusText)
@@ -48,7 +46,7 @@ struct LiteLLMSettingsView: View {
             Button(isTesting ? "Testing…" : "Test Connection") {
                 Task { await testConnection() }
             }
-            .disabled(userID.isEmpty || !isProxyURLValid || keychainStatus != .found || isTesting)
+            .disabled(email.isEmpty || !isProxyURLValid || keychainStatus != .found || isTesting)
 
             if let testResult {
                 switch testResult {
@@ -66,21 +64,22 @@ struct LiteLLMSettingsView: View {
         .onChange(of: proxyURLString) { _ in
             LiteLLMConfig.shared.proxyURLString = proxyURLString
         }
-        .onChange(of: userID) { _ in
-            LiteLLMConfig.shared.userID = userID
+        .onChange(of: email) { _ in
+            LiteLLMConfig.shared.email = email
+            refreshKeychainStatus()
         }
     }
 
     private var keychainStatusText: String {
         switch keychainStatus {
         case .checking: return "Checking Keychain…"
-        case .found: return "API key found"
-        case .missing: return "com.litellm not found in Keychain"
+        case .found: return "Password found"
+        case .missing: return "No password found in Keychain (com.litellm-password) for this email"
         }
     }
 
     private func refreshKeychainStatus() {
-        keychainStatus = (try? LiteLLMConfig.shared.readAPIKeyFromKeychain()) != nil ? .found : .missing
+        keychainStatus = (try? LiteLLMConfig.shared.readPasswordFromKeychain()) != nil ? .found : .missing
     }
 
     private func testConnection() async {

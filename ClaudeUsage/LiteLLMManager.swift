@@ -38,6 +38,17 @@ class LiteLLMManager: ObservableObject {
 
     private let config: LiteLLMConfig
 
+    /// `user_id` + session API key obtained from `POST /v2/login`. Cached in
+    /// memory ONLY (never written to Keychain/UserDefaults/disk) and reused
+    /// across refreshes until a data call rejects it with 401/403 — logging
+    /// in on every refresh would create a new LiteLLM session key each time.
+    private var cachedSession: LiteLLMSession?
+
+    struct LiteLLMSession {
+        let userID: String
+        let key: String
+    }
+
     init(config: LiteLLMConfig = .shared) {
         self.config = config
     }
@@ -61,8 +72,8 @@ class LiteLLMManager: ObservableObject {
         await refreshWithRetry(retriesRemaining: 5)
     }
 
-    private func refreshWithRetry(retriesRemaining: Int, backoffSeconds: UInt64 = 2) async {
-        guard let userID = config.userID, !userID.isEmpty, let proxyBaseURL = config.proxyURL else {
+    private func refreshWithRetry(retriesRemaining: Int, backoffSeconds: UInt64 = 2, forceRelogin: Bool = false) async {
+        guard let email = config.email, !email.isEmpty, let proxyBaseURL = config.proxyURL else {
             error = LiteLLMError.notConfigured.localizedDescription
             return
         }
@@ -71,9 +82,11 @@ class LiteLLMManager: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let apiKey = try config.readAPIKeyFromKeychain()
-            async let spendTask = fetchSpend(baseURL: proxyBaseURL, userID: userID, apiKey: apiKey)
-            async let activityTask = fetchDailyActivity(baseURL: proxyBaseURL, apiKey: apiKey)
+            let password = try config.readPasswordFromKeychain()
+            let session = try await currentSession(email: email, password: password, baseURL: proxyBaseURL, forceRelogin: forceRelogin)
+
+            async let spendTask = fetchSpend(baseURL: proxyBaseURL, session: session)
+            async let activityTask = fetchDailyActivity(baseURL: proxyBaseURL, session: session)
             let (spendResult, activityResult) = try await (spendTask, activityTask)
             spend = spendResult
             dailyActivity = activityResult
@@ -86,6 +99,13 @@ class LiteLLMManager: ObservableObject {
             }
             error = keychainError.localizedDescription
         } catch let liteLLMError as LiteLLMError {
+            // Cached session key rejected: drop it and log in again, once,
+            // within this same refresh pass.
+            if case .apiError(let code) = liteLLMError, (code == 401 || code == 403), !forceRelogin {
+                cachedSession = nil
+                await refreshWithRetry(retriesRemaining: retriesRemaining, backoffSeconds: backoffSeconds, forceRelogin: true)
+                return
+            }
             if retriesRemaining > 0 && liteLLMError.isRetryable {
                 try? await Task.sleep(nanoseconds: backoffSeconds * 1_000_000_000)
                 await refreshWithRetry(retriesRemaining: retriesRemaining - 1, backoffSeconds: backoffSeconds * 2)
@@ -104,62 +124,115 @@ class LiteLLMManager: ObservableObject {
         }
     }
 
-    private func fetchSpend(baseURL: URL, userID: String, apiKey: String) async throws -> LiteLLMSpendData {
-        var components = URLComponents(url: baseURL.appendingPathComponent("spend/users"), resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "user_id", value: userID)]
+    /// Returns the cached session, or logs in once and caches the result.
+    /// `forceRelogin` bypasses the cache after a 401/403 invalidated it.
+    private func currentSession(email: String, password: String, baseURL: URL, forceRelogin: Bool) async throws -> LiteLLMSession {
+        if !forceRelogin, let cachedSession { return cachedSession }
+        let session = try await login(email: email, password: password, baseURL: baseURL)
+        cachedSession = session
+        return session
+    }
+
+    private func login(email: String, password: String, baseURL: URL) async throws -> LiteLLMSession {
+        var request = URLRequest(url: baseURL.appendingPathComponent("v2/login"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["username": email, "password": password])
+
+        let (data, response) = try await urlSession.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw LiteLLMError.invalidResponse
+        }
+        guard httpResponse.statusCode == 200 else {
+            throw httpResponse.statusCode == 401
+                ? LiteLLMError.invalidCredentials
+                : LiteLLMError.apiError(statusCode: httpResponse.statusCode)
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let token = root["token"] as? String else {
+            throw LiteLLMError.invalidResponse
+        }
+        return try Self.decodeSession(fromJWT: token)
+    }
+
+    /// Decodes the (unverified) payload segment of the LiteLLM login JWT to
+    /// pull `user_id` and `key` — a session-scoped API key. The signature is
+    /// never checked: the app trusts the token only because it arrived over
+    /// TLS directly from the proxy URL the user configured. The token has no
+    /// `exp` claim — validity is determined reactively by a 401/403 from a
+    /// data endpoint, not by inspecting this payload.
+    private static func decodeSession(fromJWT token: String) throws -> LiteLLMSession {
+        let segments = token.split(separator: ".")
+        guard segments.count >= 2 else { throw LiteLLMError.invalidResponse }
+
+        var payload = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while payload.count % 4 != 0 { payload += "=" }
+
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let userID = json["user_id"] as? String,
+              let key = json["key"] as? String else {
+            throw LiteLLMError.invalidResponse
+        }
+        return LiteLLMSession(userID: userID, key: key)
+    }
+
+    private func fetchSpend(baseURL: URL, session: LiteLLMSession) async throws -> LiteLLMSpendData {
+        var components = URLComponents(url: baseURL.appendingPathComponent("user/info"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "user_id", value: session.userID)]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(session.key)", forHTTPHeaderField: "Authorization")
 
         let (data, response) = try await urlSession.data(for: request)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LiteLLMError.invalidResponse
         }
         guard httpResponse.statusCode == 200 else {
             throw LiteLLMError.apiError(statusCode: httpResponse.statusCode)
         }
-        guard let root = try? JSONSerialization.jsonObject(with: data) else {
-            throw LiteLLMError.invalidResponse
-        }
-
-        // The proxy may return either a single object or an array with one entry
-        // per user_id — take the first element when it's an array.
-        let entry: [String: Any]
-        if let array = root as? [[String: Any]] {
-            entry = array.first ?? [:]
-        } else if let dict = root as? [String: Any] {
-            entry = dict
-        } else {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let userInfo = root["user_info"] as? [String: Any] else {
             throw LiteLLMError.invalidResponse
         }
 
         return LiteLLMSpendData(
-            spend: entry["spend"] as? Double ?? 0,
-            maxBudget: entry["max_budget"] as? Double,
-            budgetDuration: entry["budget_duration"] as? String,
-            budgetResetAt: parseDate(entry["budget_reset_at"] as? String)
+            spend: userInfo["spend"] as? Double ?? 0,
+            maxBudget: userInfo["max_budget"] as? Double,
+            budgetDuration: userInfo["budget_duration"] as? String,
+            budgetResetAt: parseDate(userInfo["budget_reset_at"] as? String)
         )
     }
 
-    private func fetchDailyActivity(baseURL: URL, apiKey: String) async throws -> LiteLLMDailyActivity {
+    private func fetchDailyActivity(baseURL: URL, session: LiteLLMSession) async throws -> LiteLLMDailyActivity {
         let today = Self.dateOnlyFormatter.string(from: Date())
 
         var components = URLComponents(url: baseURL.appendingPathComponent("user/daily/activity"), resolvingAgainstBaseURL: false)!
         components.queryItems = [
             URLQueryItem(name: "start_date", value: today),
-            URLQueryItem(name: "end_date", value: today)
+            URLQueryItem(name: "end_date", value: today),
+            URLQueryItem(name: "page_size", value: "1000"),
+            URLQueryItem(name: "page", value: "1"),
+            // Minutes offset the reference shell implementation uses; LiteLLM
+            // doesn't document its exact meaning, but it was validated
+            // empirically (2026-09-16) to return the correct day's data.
+            URLQueryItem(name: "timezone", value: "240"),
+            // Explicit filter: the session key from /v2/login is an
+            // "internal_user" UI key, not pre-scoped to this user the way
+            // the old personal API key was — must filter server-side.
+            URLQueryItem(name: "user_id", value: session.userID)
         ]
 
         var request = URLRequest(url: components.url!)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(session.key)", forHTTPHeaderField: "Authorization")
 
         let (data, response) = try await urlSession.data(for: request)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw LiteLLMError.invalidResponse
         }
@@ -170,8 +243,6 @@ class LiteLLMManager: ObservableObject {
             throw LiteLLMError.invalidResponse
         }
 
-        // Only decode the fields the app needs — the rest of the payload
-        // (breakdown by model/key/etc.) is ignored, same approach as fetchUsage().
         guard let results = json["results"] as? [[String: Any]], let first = results.first,
               let metrics = first["metrics"] as? [String: Any] else {
             return LiteLLMDailyActivity(
@@ -217,15 +288,17 @@ class LiteLLMManager: ObservableObject {
 enum LiteLLMError: LocalizedError {
     case notConfigured
     case invalidResponse
+    case invalidCredentials
     case apiError(statusCode: Int)
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "LiteLLM is not configured. Enter your Proxy URL and User ID in Settings."
+        case .notConfigured: return "LiteLLM is not configured. Enter your email and Proxy URL in Settings."
         case .invalidResponse: return "Invalid response from the LiteLLM proxy"
+        case .invalidCredentials: return "Invalid LiteLLM email or password"
         case .apiError(let code):
-            if code == 401 || code == 403 { return "Invalid or unauthorized LiteLLM API key" }
-            if code == 404 { return "User ID not found in LiteLLM" }
+            if code == 401 || code == 403 { return "LiteLLM session expired or unauthorized" }
+            if code == 404 { return "User not found in LiteLLM" }
             if code == 429 { return "Rate limited by the LiteLLM proxy. Retrying…" }
             return "LiteLLM proxy error (code: \(code))"
         }
