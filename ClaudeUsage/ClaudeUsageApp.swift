@@ -22,7 +22,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
     var accounts: [ClaudeAccount] = []
     var usageManagers: [UsageManager] = []
-    var sessionMonitors: [SessionMonitor] = []
     var liteLLMManager = LiteLLMManager()
 
     var statusMonitor = StatusMonitor()
@@ -44,7 +43,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
 
         accounts = ClaudeAccountDiscovery.discoverAccounts()
         usageManagers = accounts.map { UsageManager(account: $0) }
-        sessionMonitors = accounts.map { SessionMonitor(account: $0) }
 
         setupStatusItem()
         setupPopover()
@@ -53,13 +51,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         setupStatusCycling()
         startFetching()
         statusMonitor.start()
-
-        // Request notification permission after launch completes (too early fails silently)
-        if sessionMonitors.contains(where: { $0.hooksInstalled }) {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-                self?.sessionMonitors.forEach { $0.requestNotificationPermission() }
-            }
-        }
     }
 
     /// With more than one account, alternate which account's % is shown in
@@ -95,13 +86,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
                 .store(in: &cancellables)
 
             manager.$error
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in self?.updateStatusItem() }
-                .store(in: &cancellables)
-        }
-
-        for monitor in sessionMonitors {
-            monitor.$sessions
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in self?.updateStatusItem() }
                 .store(in: &cancellables)
@@ -174,7 +158,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         popover?.contentViewController = NSHostingController(rootView: UsageView(
             accounts: accounts,
             usageManagers: usageManagers,
-            sessionMonitors: sessionMonitors,
             liteLLMManager: liteLLMManager
         ))
     }
@@ -182,11 +165,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
     func updateStatusItem() {
         guard let button = statusItem?.button else { return }
 
-        let attentionCount = sessionMonitors.reduce(0) { $0 + $1.needsAttentionSessions.count }
-        let bell = attentionCount > 0 ? "🔔\(attentionCount) " : ""
-
         guard !usageManagers.isEmpty else {
-            button.title = "\(bell)⏳"
+            button.title = "⏳"
             return
         }
 
@@ -207,11 +187,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             } else {
                 valueText = "\(usage.sessionPercentage)%"
             }
-            button.title = "\(bell)\(prefix)\(emoji) \(valueText)"
+            button.title = "\(prefix)\(emoji) \(valueText)"
         } else if manager.error != nil {
-            button.title = "\(bell)\(prefix)❌"
+            button.title = "\(prefix)❌"
         } else {
-            button.title = "\(bell)\(prefix)⏳"
+            button.title = "\(prefix)⏳"
         }
     }
 
@@ -229,21 +209,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        let sessionId = userInfo["session_id"] as? String
-        let accountId = userInfo["account_id"] as? String
         let statusURL = userInfo["status_url"] as? String
         Task { @MainActor in
-            if let sessionId {
-                if let accountId, let index = self.accounts.firstIndex(where: { $0.id == accountId }) {
-                    self.sessionMonitors[index].focusSession(id: sessionId)
-                } else {
-                    // No account_id (e.g. an older queued notification) — search all accounts
-                    for monitor in self.sessionMonitors where monitor.sessions.contains(where: { $0.id == sessionId }) {
-                        monitor.focusSession(id: sessionId)
-                        break
-                    }
-                }
-            } else if let statusURL, let url = URL(string: statusURL) {
+            if let statusURL, let url = URL(string: statusURL) {
                 NSWorkspace.shared.open(url)
             }
             completionHandler()

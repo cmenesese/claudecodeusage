@@ -4,9 +4,7 @@ import AppKit
 struct UsageView: View {
     let accounts: [ClaudeAccount]
     let usageManagers: [UsageManager]
-    let sessionMonitors: [SessionMonitor]
     @ObservedObject var liteLLMManager: LiteLLMManager
-    @StateObject private var combinedSessions = CombinedSessionsStore()
     @State private var showingSettings = false
 
     private static let usageSize = NSSize(width: 280, height: 320)
@@ -27,9 +25,6 @@ struct UsageView: View {
         }
         .onChange(of: showingSettings) { isShowing in
             AppDelegate.shared?.popover?.contentSize = isShowing ? Self.settingsSize : Self.usageSize
-        }
-        .onAppear {
-            combinedSessions.configure(accounts: accounts, sessionMonitors: sessionMonitors)
         }
     }
 
@@ -56,12 +51,6 @@ struct UsageView: View {
 
             Divider()
 
-            // Live Claude Code sessions (when alert hooks are installed for any account)
-            if !combinedSessions.sessions.isEmpty {
-                sessionsSection()
-                Divider()
-            }
-
             ForEach(Array(zip(accounts, usageManagers)), id: \.0.id) { account, manager in
                 AccountUsageSection(account: account, manager: manager, showsHeader: accounts.count > 1)
                 if account.id != accounts.last?.id {
@@ -79,83 +68,6 @@ struct UsageView: View {
             footerView()
         }
         .frame(width: 280)
-    }
-
-    @ViewBuilder
-    func sessionsSection() -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("CLAUDE SESSIONS")
-                .font(.caption2)
-                .fontWeight(.semibold)
-                .foregroundColor(.secondary)
-
-            ForEach(combinedSessions.sessions) { labeled in
-                Button(action: {
-                    AppDelegate.shared?.popover?.performClose(nil)
-                    sessionMonitor(for: labeled.account)?.focusSession(labeled.session)
-                }) {
-                    HStack(spacing: 8) {
-                        Text(sessionIcon(labeled.session))
-                            .font(.caption)
-
-                        VStack(alignment: .leading, spacing: 1) {
-                            HStack(spacing: 4) {
-                                Text(labeled.session.projectName)
-                                    .font(.caption)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                if accounts.count > 1 {
-                                    Text("· \(labeled.account.name)")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            Text(sessionLabel(labeled.session))
-                                .font(.caption2)
-                                .foregroundColor(labeled.session.status == .needsAttention && !labeled.session.acknowledged ? .orange : .secondary)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        Text(labeled.session.updatedAt.formatted(.relative(presentation: .named)))
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.vertical, 2)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Jump to this session's terminal window")
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-    }
-
-    private func sessionMonitor(for account: ClaudeAccount) -> SessionMonitor? {
-        guard let index = accounts.firstIndex(of: account) else { return nil }
-        return sessionMonitors[index]
-    }
-
-    func sessionIcon(_ session: ClaudeSession) -> String {
-        switch session.status {
-        case .needsAttention: return session.acknowledged ? "🔕" : "🔔"
-        case .running: return "⚙️"
-        case .finished: return "✅"
-        }
-    }
-
-    func sessionLabel(_ session: ClaudeSession) -> String {
-        switch session.status {
-        case .needsAttention:
-            if session.acknowledged { return "Waiting (seen)" }
-            return session.message.isEmpty ? "Needs your input" : session.message
-        case .running:
-            return "Working…"
-        case .finished:
-            return "Finished"
-        }
     }
 
     @ViewBuilder
@@ -530,7 +442,6 @@ struct OverageRow: View {
     UsageView(
         accounts: [account],
         usageManagers: [UsageManager(account: account)],
-        sessionMonitors: [SessionMonitor(account: account)],
         liteLLMManager: LiteLLMManager()
     )
 }
